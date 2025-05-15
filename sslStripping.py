@@ -32,6 +32,7 @@ def handle_packet(pkt):
         sc.sendp(forward_pkt, iface=sc.conf.iface, verbose=False)
         pkt = sc.sniff(filter=f"tcp and src host {serverIP} and dst port 80", store=False)
         if (is_rst(pkt)):
+            forward_to_client(pkt)
             return
         else:
             resp_ssl_strip(pkt)
@@ -74,10 +75,7 @@ def is_tcp_fin(pkt):
 
 def resp_ssl_strip(pkt):
     print(f"Packet from server to client: {pkt.summary()}")
-
-    if (is_rst(pkt)):
-        forward_to_client(pkt)
-
+    
     if not filter_response(pkt):
         return False
 
