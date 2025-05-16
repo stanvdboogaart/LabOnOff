@@ -37,3 +37,8 @@ def get_mac(ip):
         return received.hwsrc
     return None
 
+# (3.) Sends real ARP replies to stop and clean up the attack.
+def stop_attack(target_ip, real_ip, target_mac, real_mac):
+    packet = scapy.ARP(op=2, pdst=target_ip, hwdst=target_mac, psrc=real_ip, hwsrc=real_mac)
+    send(packet, count=4, verbose=False)
+
