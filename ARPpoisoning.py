@@ -3,7 +3,7 @@ from scapy.all import *;
 # This is the file for ARP poisoning. I'm not sure if it works or how to test it :)
 
 # First is my attempt at scanning the network. I'm not sure if this work and if this is what we wanted it to do if it does work.
-# Scanning network for devices, this returns (or is supposed to return) all live hosts.
+# Scanning network for devices, this returns (or is supposed to return) all live hosts in a given range 'ip'.
 def network_scan(ip):
     arp = scapy.ARP(pdst=ip)
     broadcast = scapy.Ether(dst="ff:ff:ff:ff:ff:ff")
