@@ -9,9 +9,8 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 import datetime
 
-# Generate self-signed certificate and private key if not exist
 if not os.path.exists("cert.pem") or not os.path.exists("key.pem"):
-    print("[*] Generating self-signed cert...")
+    print("Generating self-signed cert")
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     with open("key.pem", "wb") as f:
         f.write(key.private_bytes(
@@ -38,8 +37,6 @@ if not os.path.exists("cert.pem") or not os.path.exists("key.pem"):
     with open("cert.pem", "wb") as f:
         f.write(cert.public_bytes(serialization.Encoding.PEM))
 
-# --- HTTP Redirect Server (Port 80) ---
-
 class RedirectHandler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(301)
@@ -63,7 +60,6 @@ def start_http_redirect_server():
 
 threading.Thread(target=start_http_redirect_server, daemon=True).start()
 
-# --- HTTPS Server (Port 4443) ---
 
 port = 4443
 class CustomHTTPSHandler(http.server.BaseHTTPRequestHandler):
