@@ -20,7 +20,7 @@ def main():
             if goal == "ownserver":
                 ownServer = input("Enter a ip adress to reroute victim to").strip().lower()
             elif goal == "mitm":
-                sslStrip = input("Use ssl stripping: yes, no").strip().lower()
+                sslStrip = input("Use ssl stripping when possible: yes, no").strip().lower()
             parts = [p.strip() for p in targets.split(',')]
             
             if len(parts) == 2:
