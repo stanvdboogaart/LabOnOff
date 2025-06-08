@@ -69,6 +69,7 @@ def arp_poisonening(victim_ip, server_ip):
     except KeyboardInterrupt:
         stop_attack(victim_ip, server_ip, victim_mac, server_mac)
         stop_attack(server_ip, victim_ip, server_mac, victim_mac)
+        return server_mac, victim_mac
 
 
 ## Try to do de syn-ack response poging 5

