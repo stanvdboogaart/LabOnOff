@@ -136,18 +136,17 @@ def scan(ip_range):
 
 
 def is_valid_ip_pair(s):
-    # Define regex for a valid IP address
-    ip_pattern = r"(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)(\.(?!$)){3}(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)"
+    ip_octet = r"(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)"
+    ip_pattern = rf"{ip_octet}\.{ip_octet}\.{ip_octet}\.{ip_octet}"
 
-    # Full patterns to match
     full_ip = rf"^{ip_pattern},\s*{ip_pattern}$"
     ip_none = rf"^{ip_pattern},\s*none$"
     none_none = r"^none,\s*none$"
 
     return bool(
-        re.match(full_ip, s) or
-        re.match(ip_none, s) or
-        re.match(none_none, s)
+        re.match(full_ip, s, re.IGNORECASE) or
+        re.match(ip_none, s, re.IGNORECASE) or
+        re.match(none_none, s, re.IGNORECASE)
     )
 
 def is_cidr_range(s):
