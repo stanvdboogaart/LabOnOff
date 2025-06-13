@@ -24,5 +24,5 @@ def dnsSpoofer(packet):
       
 
 
-requests = sc.sniff(filter="udp port 53", prn=dnsSpoofer, store=1, timeout=140)
+requests = sc.sniff(filter="udp port 53", prn=dnsSpoofer, store=1, timeout=1040)
 requests.show()
