@@ -93,7 +93,7 @@ def main():
                     serverMac, victimMac = ArpPoisen.arp_poisoning(victimIP, serverIP, silent)
 
                 if goal == "ownserver":
-                    sslStripping.forward(victimIP, victimMac, ownServerIp, ownServerMac, attackerIP, attackerMac)
+                    forwardToExternalServer()
                     return
                     
                 elif goal == "mitm":
@@ -166,6 +166,9 @@ def is_ipv4_address(s):
         return True
     except ValueError:
         return False
+    
+def forwardToExternalServer():
+    return
 
 if __name__ == "__main__":
     main()
