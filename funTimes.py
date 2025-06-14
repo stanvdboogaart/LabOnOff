@@ -73,7 +73,7 @@ def main():
                 serverIP = parts[1] if parts[1] != "none" else None
                 print("len part", victimIP, " server: ",serverIP)
 
-                ArpPoisen.arp_poisoning(victimIP, serverIP, silent)
+                ArpPoisen.arp_poison(victimIP, serverIP, silent)
 
                 if goal == "ownserver":
                     forwardToExternalServer()
