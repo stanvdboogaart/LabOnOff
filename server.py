@@ -84,6 +84,6 @@ httpd.socket = context.wrap_socket(httpd.socket, server_side=True)
 hostname = socket.gethostname()
 local_ip = socket.gethostbyname(hostname)
 # print(f"HTTPS server running on https://{local_ip}:{port} (or https://localhost:{port})")
-print("HTTPS server running on https://"+ local_ip +":" + port + "(or https://localhost:" + port)
+print("HTTPS server running on https://"+ local_ip +":" + port "(or https://localhost:" + port)
 
 httpd.serve_forever()
