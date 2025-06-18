@@ -41,12 +41,10 @@ class RedirectHandler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(301)
         hostname = self.headers.get("Host", "localhost").split(":")[0]
-        # new_url = f"https://{hostname}:4443{self.path}"
-        new_url = "https://"+ hostname +":4443" + self.path
+        new_url = f"https://{hostname}:4443{self.path}"
         self.send_header("Location", new_url)
         self.end_headers()
-        # message = f"Please use HTTPS instead: {new_url}"
-        message = "Please use HTTPS instead: " + new_url
+        message = f"Please use HTTPS instead: {new_url}"
         self.wfile.write(message.encode("utf-8"))
 
     def log_message(self, format, *args):
@@ -83,7 +81,6 @@ httpd.socket = context.wrap_socket(httpd.socket, server_side=True)
 
 hostname = socket.gethostname()
 local_ip = socket.gethostbyname(hostname)
-# print(f"HTTPS server running on https://{local_ip}:{port} (or https://localhost:{port})")
-print("HTTPS server running on https://"+ local_ip +":" + port "(or https://localhost:" + port)
+print(f"HTTPS server running on https://{local_ip}:{port} (or https://localhost:{port})")
 
 httpd.serve_forever()
