@@ -57,6 +57,7 @@ def dns_handle_packet(packet):
             print(f"\n response recieved: {qname}")
 
             DNS_RECORDS[qname] = packet
+            print(f"packet = {packet}")
             print(f"\nresponse added to DNS_RECORDS: {qname}")
             for i in range(packet[sc.DNS].ancount):
                 print(f"\n{packet[sc.DNS].an[i].rdata}")
