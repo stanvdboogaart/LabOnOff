@@ -6,7 +6,7 @@ MY_IP = sc.get_if_addr(sc.conf.iface)
 
 def startServer():
 
-    print(f"Starting fake DNS server")
+    print("Starting fake DNS server")
     
 
 
@@ -19,17 +19,17 @@ def dns_handle_packet(packet):
 
         if packet.haslayer(sc.DNS) and packet.getlayer(sc.DNS).qr == 0:
 
-            print(f"\n{(packet)[sc.DNS].summary()} recieved")
+            print("\n"+ (packet)[sc.DNS].summary() +  "recieved")
             
             qname = packet[sc.DNSQR].qname.decode()
-            print(f"\npacket recieved: {qname}")
+            print("\npacket recieved: " + qname)
 
             try:
                 sc.send(DNS_RECORDS[qname])
-                print(f"\n{qname}: {(DNS_RECORDS[qname])[sc.DNS].summary()} sent from DNS_RECORDS")
+                print("\n" + qname (DNS_RECORDS[qname])[sc.DNS].summary() + " sent from DNS_RECORDS")
 
             except:
-                print(f"\n{qname} not stored yet")
+                print("\n" + qname + "not stored yet")
 
 
             if qname in DNS_ALREADY_FORWARDED:
@@ -40,33 +40,33 @@ def dns_handle_packet(packet):
 
             response = send_DNS_Request(qname)
             sc.send(response)
-            print(f"\nresponse sent: {qname}")
+            print("\nresponse sent: "+ {qname})
 
             DNS_RECORDS[qname] = response
-            print(f"\nresponse added to DNS_RECORDS: {qname}, {packet[sc.DNS]}")
-            print(f"\n{response[sc.DNS]}")
+            print("\nresponse added to DNS_RECORDS: " + {qname} + {packet[sc.DNS]})
+            print("\n" + {response[sc.DNS]})
 
             DNS_ALREADY_FORWARDED.add(qname)
-            print(f"\n{qname} added to DNS_ALREADY_FORWARDED")
+            print("\n" + {qname} + " added to DNS_ALREADY_FORWARDED")
 
 
 
         elif packet.haslayer(sc.DNS) and packet.getlayer(sc.DNS).qr == 1:
             
             qname = packet[sc.DNSQR].qname.decode()
-            print(f"\n response recieved: {qname}")
+            print("\n response recieved: " + {qname})
 
             DNS_RECORDS[qname] = packet
-            print(f"packet = {packet}")
-            print(f"\nresponse added to DNS_RECORDS: {qname}")
+            print("packet = " + {packet})
+            print("\nresponse added to DNS_RECORDS: " + {qname})
             for i in range(packet[sc.DNS].ancount):
-                print(f"\n{packet[sc.DNS].an[i].rdata}")
+                print("\n"+ {packet[sc.DNS].an[i].rdata})
                 
 
             
 
             DNS_ALREADY_FORWARDED.add(qname)
-            print(f"\n{qname} added to DNS_ALREADY_FORWARDED")
+            print("\n" + {qname} +  "added to DNS_ALREADY_FORWARDED")
 
 
 
