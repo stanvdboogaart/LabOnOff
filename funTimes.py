@@ -22,10 +22,10 @@ def main():
         sslStrip = ""
         ownServerIp = ""
         silent = ""
-        while (ipt != "scan" and  ipt != "arp" and ipt != "quit" and ipt != "listen"):
+        while (ipt != "scan" and  ipt != "arp" and ipt != "quit" and ipt != "mitm"):
             if (ipt != ""):
                 print("Invalid input, please try again")
-            ipt = input("Enter a command: Scan, ARP, listen, quit: ").strip().lower()
+            ipt = input("Enter a command: Scan, ARP, mitm, quit: ").strip().lower()
 
         if ipt == "scan":
             while (not is_cidr_range(ip_range)):
@@ -34,7 +34,7 @@ def main():
                 ip_range = input("Enter ip range in CIDR notation: ").strip().lower()
             scan(ip_range)
 
-        elif ipt == "arp" or ipt == "listen":
+        elif ipt == "arp" or ipt == "mitm":
             if (ipt == "arp"):
                 while (not is_valid_ip_pair(targets)):
                     if (targets != ""):
@@ -48,7 +48,7 @@ def main():
                     if (silent != ""):
                         print("Invalid input, please try again")
                     silent = input("Enter 'silent' or 'allOut': ").strip().lower()
-            elif (ipt == "listen"):
+            elif (ipt == "mitm"):
                 while (not is_valid_full_ip_pair(targets)):
                     if (targets != ""):
                         print("Invalid input, please try again")
