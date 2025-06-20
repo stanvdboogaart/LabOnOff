@@ -18,9 +18,7 @@ def main():
         ipt = ""
         ip_range = ""
         targets = ""
-        goal = ""
         sslStrip = ""
-        ownServerIp = ""
         silent = ""
         while (ipt != "scan" and  ipt != "arp" and ipt != "quit" and ipt != "mitm"):
             if (ipt != ""):

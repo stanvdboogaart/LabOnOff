@@ -7,7 +7,6 @@ A network attack toolkit for performing **ARP poisoning**, **DNS spoofing**, and
 ## Features
 
 - ARP poisoning
-- DNS spoofing 
 - SSL stripping
 - MITM position creation
 - Passive network scan to identify active hosts
