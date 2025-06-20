@@ -67,7 +67,7 @@ class CustomHTTPSHandler(http.server.BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-type", "text/html")
         self.end_headers()
-        html = "<html><body><h1>website</h1></body></html>"
+        html = "<html><body><h1>website on a HTTPS server</h1></body></html>"
         self.wfile.write(html.encode("utf-8"))
 
     def log_message(self, format, *args):
