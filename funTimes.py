@@ -4,6 +4,10 @@ import scapy.all as sc;
 import re
 import ipaddress
 
+# Authors:
+# Lonneke van Baren 1851926
+# Marijn Kouwenberg 1833871
+
 victimIP = ""
 serverIP = ""
 victimMac = ""
@@ -20,6 +24,7 @@ def main():
         targets = ""
         sslStrip = ""
         silent = ""
+        #ask for input and call corresponding methods
         while (ipt != "scan" and  ipt != "arp" and ipt != "quit" and ipt != "mitm"):
             if (ipt != ""):
                 print("Invalid input, please try again")
@@ -88,7 +93,7 @@ def get_mac(ip):
 
     # Parse response
     for sent, received in answered_list:
-        return received.hwsrc  # MAC address
+        return received.hwsrc 
 
     return None
 
@@ -101,8 +106,6 @@ def scan(ip_range):
 def stop_at_syn(pkt):
     if pkt.haslayer(sc.TCP):
         tcp = pkt[sc.TCP]
-        # Check if SYN flag is set (flags is an int, SYN flag = 0x02)
-        # Or just do tcp.flags & 0x02 != 0
         if tcp.flags & 0x02:
             return True
     return False

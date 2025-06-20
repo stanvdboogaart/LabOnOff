@@ -1,6 +1,7 @@
 import scapy.all as sc
 
-
+# Author:
+# Stan van den Boogaardt
 
 
 maliciousWebsite = "131.155.10.135"

