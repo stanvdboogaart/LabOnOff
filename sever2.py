@@ -10,11 +10,7 @@ class SimpleHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
         html = """
         <html>
-            <head><title>Simple HTTP Server</title></head>
-            <body>
-                <h1>Hello from Port 80!</h1>
-                <p>This is a plain HTTP server.</p>
-            </body>
+            <head><title>Website on a HTTP Server</title></head>
         </html>
         """
         self.wfile.write(html.encode("utf-8"))

